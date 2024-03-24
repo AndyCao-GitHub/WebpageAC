@@ -1,0 +1,1038 @@
+---
+title: "Risk Polarization Simulation"
+author: "Andy Cao"
+date: "`r Sys.Date()`"
+output: 
+   html_document:
+      css: styles.css
+      toc: true
+      number_sections: false
+      toc_float: true
+      collapsed: true
+      smooth_controll: false
+      fig.width: 26
+      fig.height: 26
+      code_download: true
+---
+
+# Exploring Risk Polarization
+
+
+## Introduction  
+
+Risk perception may vary among different people, across different contexts and over time. Understanding how people perceive specific risks enables us to pinpoint crucial factors that can inform policy implementation, mobilize communities, and unite them under a common goal. Thus, it is essential to investigate which events are perceived as risky and whether there is polarization (e.g. no clear consensus).  
+
+Polarization can be measured in many different ways. A recent [preprint by Fischer & Frey](https://osf.io/preprints/psyarxiv/bv496) have shown at least 8 different measures of polarization itself. Depending on which measure is taken to describe polarization, researchers, stakeholders and policy makers may arrive at different conclusions, which hinders the decision-making process. It is therefore of utmost importance to find a common ground.  
+
+This work tries to built the groundwork for an upcoming study, which aims to collect risk scores of several risks. Examples of such risks are *vaccination*, *war*, or *firefighter*.\
+Though it is still uncertain how may ratings a risk needs, so we can be sure that it is representative for the population in question. Therefore, a simulation approach was chosen to decide how many participants are needed per risk.  
+
+To summarise, this work has two objectives:  
+  
+- Help identify which measure(s) to take which should indicate polarization.  
+- A sort of power analysis to estimate how many ratings a risk needs.  
+
+
+## Polarization Measures
+
+The following 8 different measures of polarization were formulated in the previous mentioned preprint:
+
+-   Spread (or more commonly known as Range)\
+-   Dispersion\
+-   Coverage\
+-   Size Parity\
+-   Group Divergence\
+-   Polarization Index\
+-   Group Distinctness (or Overlap Coefficient)\
+-   [Bimodality Coefficient](https://documentation.sas.com/doc/en/statug/15.2/statug_cluster_details17.htm)
+
+For a more in-depth review of those measures, please refer to the [preprint](https://osf.io/preprints/psyarxiv/bv496).
+
+Additionally, there is one other measure of polarization which is often used in sociology, building upon [van der Eijk's measure of agreement A](https://link.springer.com/article/10.1023/A:1010374114305#citeas):
+
+-   Polarization
+
+In order to safe time, two polarization measures were omitted in this simulation:
+
+1.  Spread is strongly influenced by one outlier (here: risk rating), and will therefore be omitted. Most range values would be on the higher end, and therefore, no variation would be expected.
+2.  Group Distinctness can not be calculated in our simulation, as it needs some categorical grouping variable. This means that the simulation would need to create at least two underlying distributions.  
+
+All included measures can range between 0 and 1, and higher values indicate higher polarization.
+
+```{r Setup, include=TRUE, warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+
+library(tidyverse) #data wrangling and other tools for R
+library(knitr) # report generation in R
+library(psych) #calculate skew and kurtosis for BC
+library(agrmt) #for agreement and polarization calculation
+library(visdat) #visualize dataframes in plots
+library(RColorBrewer) #easy to use color palettes
+library(rmarkdown) #for the paged_table function
+
+library(doParallel) #parallel computation using multiple cores
+library(foreach) # for each function, so the simulation does not take ages
+
+sample_sequence <- c(seq(80,200,by =10), seq(300,1000, by = 100))
+sampled <- data.frame(N_part = sample_sequence)
+replications_per_setting <- 100
+
+#set echo = FALSE (e.g. dont show code in output) for all chunks, except when explicitly telling otherwise
+knitr::opts_chunk$set(
+   echo = FALSE,
+   warning = TRUE,
+   message = TRUE
+   )
+
+```
+
+# Method  
+
+The method chosen for the simulation procedure is called the **Monte Carlo simulation**. At its core, the simulation consists of random sampling and statistical analysis, provided the underlying system can be roughly estimated or approximated with the simulation itself. As the procedure leverages the law of large numbers, the process takes a large number of random samples of said system to solve a complex problem.  
+  
+## Probability Distributions  
+
+We use several probability distributions as a proxy for the "true" distribution of different kinds of risks in a certain population. Using different distributions can give us a better insight, **assuming the distribution is also representative in the population** we want to sample in.  
+
+While most things in nature is normally distributed, using the beta distribution to illustrate a polarized distribution is also warranted. Therefore, this simulation uses both of these distribution types as a proxy for our risks.
+
+```{r Probability Distributions in Population}
+
+population <- 10^5
+prop_minority <- .02
+
+# Create a grid of parameters
+beta_param <- data.frame( param_1 = c( 2, .1),
+            param_2 = c(.6, .1))
+# set the seed, so everything here is replicable
+set.seed(42)
+
+# Generate random data from beta distributions with different parameters
+data <- map2(beta_param$param_1, beta_param$param_2, ~ rbeta(population, .x, .y))
+
+df <- as.data.frame(data)
+
+colnames(df) <- 1:nrow(beta_param)
+df <- as.data.frame(t(df))
+
+#create normal distribution, and additionally one where we combine combining 2 normal distributions
+normal_para <- data.frame(param_1 = c(.5, 0),
+                          param_2 = c(.15, .1))
+
+parameters <- rbind(beta_param, normal_para)
+
+additional_param <- data.frame(param_3 = c(rep(0,nrow(beta_param)), 0, 1),
+                               param_4 = c(rep(0,nrow(beta_param)), 0, .01))
+
+#normal distribution
+vec <- c()
+i = 1
+while (i <= population){
+   a = rnorm(1, mean = normal_para$param_1[1], sd = normal_para$param_2[1])
+   if (a <= 1 && a >= 0){
+      vec[i] <- a
+      i = i + 1
+   }
+}
+
+normal_distr <- as.data.frame(t(vec))
+
+#combined normal distribution
+vec <- c()
+i = 1
+while (i <= population * (1- prop_minority)){
+   a = rnorm(1, mean = parameters$param_1[nrow(parameters)], sd = parameters$param_2[nrow(parameters)])
+   if (a >= 0){
+      vec[i] <- a
+      i = i + 1
+   }
+}
+
+vec1 <- as.data.frame(vec)
+
+vec <- c()
+i = 1
+while (i <= population* prop_minority){
+   a = rnorm(1, mean = additional_param$param_3[nrow(additional_param)], sd = additional_param$param_4[nrow(additional_param)])
+   if (a <= 1){
+      vec[i] <- a
+      i = i + 1
+   }
+}
+
+vec2 <- as.data.frame(vec)
+
+combined_distr <- as.data.frame(t(rbind(vec1,vec2)))
+
+
+df <- rbind(df, normal_distr, combined_distr)
+
+#create the different functions so we can calculate the polarization measures, which is needed for the next step
+calculate_skewness <- function(column) {
+   result <- describe(column, skew = TRUE)
+   return(result$skew)
+}
+
+calculate_kurtosis <- function(column) {
+   result <- describe(column)
+   return(result$kurtosi)
+}
+
+calculate_n <- function(column) {
+   result <-  sum(!is.na(column))
+}
+
+#calculate new vectors for each risk distribution, and add them to the dataframe
+skew<-apply(df, 1,  calculate_skewness)
+kurtosis <- apply(df, 1, calculate_kurtosis)
+
+
+df2 <- cbind(parameters, additional_param, df, skew, kurtosis)  %>% as.data.frame() %>% 
+   pivot_longer(cols = starts_with("V"), names_to = "variant", values_to = "values") %>% 
+   mutate(param_1 = as.numeric(param_1),
+          param_2 = as.numeric(param_2),
+          Parameters = factor(paste(param_1, param_2, sep = "-"))) %>% 
+   group_by(param_1,param_2, param_3, param_4) %>% 
+   mutate(n = n(),
+          ID = cur_group_id())
+
+#calculate the bimodial coefficient according to Fischer & Frey
+df2 <-  df2 %>% mutate(bimod_coeff = (skew^2+1)/ (kurtosis + ((3*((n-1))^2)/((n-2)*(n-3)))))
+
+
+BC_annotation <- df2 %>% 
+   group_by(param_1,param_2, param_3, param_4) %>% 
+   distinct(Parameters,bimod_coeff) %>% 
+   arrange(bimod_coeff)
+
+# create color vector, so each color is easy to distinguish for those groups
+colors <- brewer.pal(4, "Dark2")
+
+df2$Parameters <- reorder(df2$Parameters, df2$bimod_coeff)
+
+
+#order is: normal distribution first, then beta skewed, mixed, then beta symmetric
+# levels(df2$Parameters)
+
+#create the plot
+df2 %>% ggplot(aes(values, col = Parameters))+
+   geom_density(linewidth = 1.1) +
+   theme_minimal()+
+   scale_color_manual(values = colors)+
+   annotate("text", x = .5, y = 7, col = colors[1], size = 6, label = str_c("M = ",BC_annotation$param_1[1],
+                                                                              ", SD = ", BC_annotation$param_2[1],
+                                                                              ", BC = ", round(BC_annotation$bimod_coeff[1], 2)))+
+   annotate("text", x= .5, y = 6,col = colors[3], size = 6, label = str_c("M = ", BC_annotation$param_1[3], "; ", BC_annotation$param_3[3],
+                                                                            ", SD = ", BC_annotation$param_2[3], "; ", BC_annotation$param_4[3],
+                                                                            ", BC = ", round(BC_annotation$bimod_coeff[3], 2)))+
+   annotate("text", x= .5, y = 5,col = colors[2], size = 6, label = str_c("Alpha = ", BC_annotation$param_1[2],
+                                                                            ", " ,"Beta = ", BC_annotation$param_2[2],
+                                                                            ", ", "BC = ", round(BC_annotation$bimod_coeff[2], 2)))+
+   annotate("text", x= .5, y = 4 ,col = colors[4], size = 6, label = str_c("Alpha = ", BC_annotation$param_1[4],
+                                                                            ", " ,"Beta = ", BC_annotation$param_2[4],
+                                                                            ", ", "BC = ", round(BC_annotation$bimod_coeff[4], 2)))+
+   theme(legend.position = "none")+
+   ylab("Density")+
+   xlab("Value")
+
+```
+
+To simulate different types of risk and their possible distributions, we chose two beta distributions (a [**skewed beta distribution**]{style="color: `r colors[2]`;"}, and a [**symmetrical beta distribution**]{style="color: `r colors[4]`;"}), a [**normal distribution**]{style="color: `r colors[1]`;"}, as well as a [**mixed distribution**]{style="color: `r colors[3]`;"} which is built with two underlying normal distributions itself.  
+  
+  
+While the two beta distributions should simulate risks that are polarized in different manners, the normal distribution is a proxy for a risk where there is a consensus in the population.  
+
+The mixed distribution tries to capture the distribution where a minority (in this case with a base rate of ``r prop_minority *100``%), have a polarizing opinion compared to a majority in a population.  
+
+## The Simulation Procedure  
+
+For the simulation itself, we use ``r nrow(sampled)`` different sample sizes:
+
+```{r Show sample sequence}
+sample_sequence
+```
+
+Using these different sample sizes, we simulate for each of our ``r nrow(BC_annotation)`` risk distributions, and replicate this procedure ``r replications_per_setting`` times, which leaves us with ``r nrow(sampled) * nrow(BC_annotation) * replications_per_setting`` simulations.\
+The grouped difference of these samples should then be compared against the polarization measure of the whole risk distribution itself, which functions as our "true score".
+
+```{r Simulation Procedure}
+set.seed(42)
+
+max_cols <- max(sampled)   
+
+# Register parallel backend with the desired number of cores
+num_cores <- detectCores()
+num_cores <- floor(num_cores/2)
+
+cl <- makeCluster(num_cores)
+registerDoParallel(cl)
+
+# Define function to process each combination of risk_distribution, samplesize and replications per setting
+sample__and_replicate_for_all_risks <- function(i) {
+  sampled_matrix_list <- list()
+  
+  for (j in 1:nrow(df)) {
+    mat <- replicate(replications_per_setting,
+                     sample(1:population, size = sampled[i, 1], replace = TRUE)) #create matrix of our samples with replacing, times n - replications
+    
+    sampled_table <- df[j, mat] #using the matrix, collect the values from our risk distribution matrix (as a vector though...)
+    sampled_matrix <- as.data.frame(matrix(sampled_table,
+                                           nrow = replications_per_setting,
+                                           ncol = sampled[i, 1],
+                                           byrow = TRUE,
+                                           dimnames = NULL)) #create df out of these vectors instead of flat vectors
+    
+    
+    if (ncol(sampled_matrix) < max_cols) {
+      padding_matrix <- matrix(NA,
+                               nrow = nrow(sampled_matrix),
+                               ncol = max_cols - ncol(sampled_matrix))
+      sampled_matrix <- cbind(sampled_matrix, padding_matrix)
+    } #if matrix is not wide enough for our end result matrix, padd it with NA columns, so binding rows is doable (needs same amount of ncols)
+    
+    sampled_matrix <- cbind(matrix(sampled[i,1], nrow = replications_per_setting), 
+                            matrix(j, nrow = replications_per_setting),
+                            sampled_matrix) #bind columns with additional information such as sample size and which risk_distribution was sampled
+    
+    colnames(sampled_matrix) <- c("sample_size", "risk_distribution", paste0("rating_", 1:max_cols)) #rewrite colnames so it is identical to the bigh matrix
+    sampled_matrix_list[[j]] <- sampled_matrix #store in list
+  }
+  return(do.call(rbind, sampled_matrix_list)) #after all risk distributions are sampled from, bind them all and return the output
+  
+}
+
+# Perform parallel processing using foreach, iterating through the different samplesizes
+result <- foreach(i = 1:nrow(sampled), .combine = rbind) %dopar% {
+  sample__and_replicate_for_all_risks(i)
+}
+
+# Stop the parallel backend
+stopCluster(cl)
+
+result <- mutate_all(result, as.numeric )
+
+snipped_matrix <- result[, seq(72,1002, by= 20)]
+
+vis_miss(snipped_matrix, show_perc_col = F)
+```
+
+The plot above shows a snipped of our current matrix. The matrix has a staircase-like shape, as not every simulation has 1000 ratings. For example, the first few rows contains only ``r sampled[1,1]`` ratings, whereas at the bottom end, we have ``r sampled[nrow(sampled),1]`` ratings. Overall, the matrix contains ``r dim(result)[1] * (dim(result)[2]-2) - sum(is.na(result))`` risk ratings.
+
+We use this matrix to calculate our polarization measures. Storing these risk ratings in one big matrix (even though it has more "missing" values) helps to avoid errors down the line, and speeds up the calculation as well.
+
+```{r Calculate Polarization Measures, results='hide'}
+
+#shape our population dataframe so it is easier to work with, as well as turn values to numeric, so we can start with calculations
+df <- t(df)
+colnames(df) <- NULL
+df <- mutate_all(as.data.frame(df), as.numeric)
+df <- t(df)
+
+#round our matrix to a certain digit, so we have some "discrete" numbers, which makes it comparable to our study
+result[,-c(1:2)] <- round(result[,-c(1:2)], digits = 2)
+
+
+#creating the functions for our polarizatino measurements
+
+calc_dispersion <- function(vec){
+      median_val <- median(vec, na.rm = TRUE)
+      abs_deviation <-  abs(vec - median_val)
+      return(median(abs_deviation, na.rm = TRUE))
+}
+
+calc_coverage <- function(vec, range = 1, n_intervals = 10){
+
+   intervals <- range/n_intervals * c(0:n_intervals)
+   to_sum <- 0
+   N <-  sum(!is.na(vec))
+   # Create 10 intervals for each row
+   # coverages <- sapply(seq_along(intervals), function(j) {
+   #    row_interval <- intervals[j]
+   #    count <- sum(intervals[j] <= vec & vec <= intervals[j+1], na.rm = T)
+   # }
+   # )
+   
+   coverages <- vec %>% 
+      as.numeric() %>% 
+      cut(breaks = intervals, include.lowest = TRUE) %>% 
+      table() %>% 
+      as.numeric()
+   
+   if (sum(coverages, na.rm = TRUE) != N){
+      return("sum of coverages not equal N")
+   }
+   else{
+      for (j in 1:length(coverages)){
+         n <- coverages[j]
+         to_sum <- to_sum + (n * (n-1))
+      } 
+   }
+   return( 1- (to_sum / (N * (N-1))) )
+}
+
+calc_size_parity <- function(vec, midpoint = .5){
+   Nhigh <- sum(vec >= midpoint, na.rm = TRUE)
+   Nlow <- sum(vec < midpoint, na.rm = TRUE)
+   N <- sum(!is.na(vec))
+   return(abs( (Nhigh/N) - (Nlow/N)))
+}
+
+calc_group_divergence <- function(vec, midpoint = .5, scale_range = 1){
+   
+   X_high <- mean(vec[vec >= midpoint], na.rm = TRUE)
+   if(sum(vec[vec >= midpoint], na.rm =T ) == 0){
+      X_high <- 0
+   }
+   
+   X_low <-  mean(vec[vec < midpoint], na.rm = TRUE)
+   if(sum(vec[vec < midpoint], na.rm =T ) == 0){
+      X_low <- 0
+   }
+   return((abs(X_high - X_low)/ scale_range))
+}
+
+calc_polarization_index <- function(vec){
+   S <- calc_size_parity(vec)
+   d <- calc_group_divergence(vec)
+   return( (1-S)* d)
+}
+
+calc_bimodality_coefficient <- function(vec){
+   skew <- skew(vec, na.rm = TRUE, type = 3)
+   kurtosis <- kurtosi(vec, na.rm = TRUE, type = 3)
+   n <- sum(!is.na(vec))
+   return((skew^2+1) / (kurtosis + ((3*((n-1))^2)/((n-2)*(n-3))) ))
+}
+
+
+#needed for the polarization measure
+calc_ordered_freq_vec <- function(vec, range = 1, n_intervals = 100){
+   
+   intervals <- range/n_intervals * c(0:n_intervals)
+   N <- sum(!is.na(vec))
+   #get ordered frequency vector, which is needed for the main function, but foreach and dopar does not support pipes, so I'll have to write it in base R syntax...
+   ordered_freq_vec <-
+      as.numeric(table(cut(as.numeric(vec), breaks = intervals, include.lowest = TRUE)))
+   
+   if (sum(ordered_freq_vec, na.rm = TRUE) != N){
+      return("sum of coverages not equal N")
+   }
+   return(ordered_freq_vec)
+}
+
+
+# calculate our measures on our samples, as well as on our population 
+dispersion_result <- apply(result[,-(1:2)], 1, calc_dispersion)
+sum(is.na(dispersion_result))
+
+coverage_result <- apply(result[,-(1:2)], 1, calc_coverage)
+coverage_result2 <- as.integer(coverage_result)
+sum(is.na(coverage_result))
+
+size_parity_result <- apply(result[,-(1:2)], 1, calc_size_parity)
+sum(is.na(size_parity_result))
+
+group_divergence_result <- apply(result[,-(1:2)], 1, calc_group_divergence)
+sum(is.na(group_divergence_result))
+
+polarization_index_result <- apply(result[,-(1:2)], 1, calc_polarization_index)
+sum(is.na(polarization_index_result))
+
+BC_result <- apply(result[,-(1:2)], 1, calc_bimodality_coefficient)
+sum(is.na(BC_result))
+
+#as the computation of polarisation is really straining with 100 categories, this took around 30 min to compute, even with 6 cores and what I believe to be the most efficient way possible to calculate. For this reason, I've saved the results to a sepparate RDS file so it is easier to get acess to it without recalculating this polarisation measure again.
+
+# cl <- makeCluster(detectCores())
+# registerDoParallel(cl)
+# 
+# freq_vec_results <- foreach(i = 1:nrow(result), .combine = rbind) %dopar% {
+#   calc_ordered_freq_vec(result[i, -c(1:2)])
+# }
+# 
+# 
+# polarization_result <- foreach(i = 1:nrow(freq_vec_results), .combine = c) %dopar% {
+#   agrmt::polarization(freq_vec_results[i, ])
+# }
+# 
+#saveRDS(polarization_result, "polarisation_result.rds")
+# 
+# 
+# #polarization_result <- foreach(i = 1:nrow(result), result[,-(1:2)], 1, calc_polarization)
+# stopCluster(cl)
+
+
+
+
+polarization_result <- readRDS("polarisation_result.rds")
+sum(is.na(polarization_result))
+
+combined_result_measures <- cbind(polarization_result, 
+                                  dispersion_result,
+                                  coverage_result,
+                                  size_parity_result,
+                                  group_divergence_result,
+                                  polarization_index_result,
+                                  BC_result,
+                                  result[,1:2]
+                                  )
+
+sum(is.na(combined_result_measures))
+
+vis_miss(combined_result_measures, sort_miss = F)
+```
+
+```{r Calculate True Scores in our Population Distribution, results='hide'}
+risk_distribution <- 1:4
+
+risk_distribution_transl <- c("Beta 1 ", "Beta 2", "Normal", "Mixed")
+
+dispersion_population <- apply(df, 1, calc_dispersion)
+sum(is.na(dispersion_population))
+
+coverage_population <- apply(df, 1, calc_coverage)
+sum(is.na(coverage_population))
+
+size_parity_population <- apply(df, 1, calc_size_parity)
+sum(is.na(size_parity_population))
+
+group_divergence_population <- apply(df, 1, calc_group_divergence)
+sum(is.na(group_divergence_population))
+
+polarization_index_population <- apply(df, 1, calc_polarization_index)
+sum(is.na(polarization_index_population))
+
+BC_population <- apply(df, 1, calc_bimodality_coefficient)
+sum(is.na(BC_population))
+
+
+cl <- makeCluster(detectCores())
+registerDoParallel(cl)
+
+freq_vec_results <- foreach(i = 1:nrow(df), .combine = rbind) %dopar% {
+  calc_ordered_freq_vec(df[i,])
+}
+
+
+polarization_population <- foreach(i = 1:nrow(freq_vec_results), .combine = c) %dopar% {
+  agrmt::polarization(freq_vec_results[i, ])
+}
+
+#polarization_result <- foreach(i = 1:nrow(result), result[,-(1:2)], 1, calc_polarization)
+stopCluster(cl)
+
+combined_population_measures  <- cbind(polarization_population, 
+                                  dispersion_population,
+                                  coverage_population,
+                                  size_parity_population,
+                                  group_divergence_population,
+                                  polarization_index_population,
+                                  BC_population,
+                                  risk_distribution,
+                                  risk_distribution_transl
+                                  ) %>% 
+                                 as.data.frame() %>% 
+   mutate_at(1:8, as.numeric)
+
+```
+
+# Results
+
+## Overall {.tabset}  
+
+### Plot
+```{r Combine everything, calculate differences and plot, warning = FALSE, error=FALSE, message=FALSE}
+final_combination <- combined_result_measures %>% 
+   full_join(combined_population_measures, by = "risk_distribution") %>% 
+   mutate(diff_Polarization = polarization_population - polarization_result,
+          diff_Dispersion = dispersion_population - dispersion_result,
+          diff_Coverage = coverage_population - coverage_result,
+          diff_Size_Parity = size_parity_population - size_parity_result,
+          diff_Group_Divergence = group_divergence_population - group_divergence_result,
+          diff_Polarization_Index = polarization_index_population - polarization_index_result,
+          diff_BC = BC_population - BC_result)
+
+#sum(is.na(final_combination))
+
+final_combination_long <- final_combination %>%
+   select(sample_size, risk_distribution, contains("diff_"), risk_distribution_transl) %>% 
+   pivot_longer(contains("diff_"), names_to = "Measurement",names_prefix = "diff_",  values_to = "Difference")
+
+final_summarized_table <- final_combination_long %>%
+   group_by(risk_distribution, risk_distribution_transl, sample_size, Measurement) %>% 
+   summarise('Mean Difference' = mean(Difference),
+             'SD Difference' = sd(Difference),
+             'Min Difference' = min(Difference),
+             'Max Difference' = max(Difference)) %>% 
+   ungroup() %>% 
+   mutate(fsample_size = factor(sample_size, ordered = TRUE))
+
+
+
+#reorder so each one gets their own color again:
+#order is: normal distribution first, then beta skewed, mixed, then beta symmetric
+final_summarized_table$risk_distribution_transl <- factor(final_summarized_table$risk_distribution_transl, levels = c("Normal", "Beta 1 ", "Mixed", "Beta 2"), labels = c("Normal", "Skewed Beta", "Mixed", "Symmetric Beta"))
+   
+final_summarized_table %>% 
+   ggplot(aes(fsample_size, `Mean Difference`, col = risk_distribution_transl, group = risk_distribution_transl))+
+   geom_line()+
+   geom_point(size = 2, alpha = .8)+
+   facet_grid(rows = vars(Measurement))+
+   scale_color_manual(values = colors)+
+   geom_hline(yintercept = 0 , col="black", linetype= "dashed", linewidth = .9, alpha = .8)+
+   theme_minimal()+
+   xlab("Sample Size")+
+   theme(legend.title = element_blank())
+```
+
+### Polarization measures in our population distribution {.active}  
+
+```{r}
+combined_population_measures2 <- combined_population_measures
+combined_population_measures2$risk_distribution_transl <- c("Skewed Beta", "Symmetric Beta", "Normal", "Mixed")
+combined_population_measures2 %>% 
+   select(1:7,9) %>% 
+   #mutate_at(1:7, .funs = ~round(., digits = 3))%>% 
+   kable(format = "html", 
+         caption = "True Score Table", 
+         digits = 3, 
+         col.names = c("Polarization", "Dispersion", "Coverage", "Size Parity", "Group Divergence", "Polarization Index", "Bimodality Coefficient", "Risk Distribution"), 
+         align = "c",
+         row.names = FALSE) %>% 
+   kableExtra::row_spec(row = 0, angle = -25)
+
+```
+
+
+## Bimodality Coefficient {.tabset}
+
+### Plot
+
+```{r Bimodality Coefficient}
+
+
+splitted_summary <- split(final_summarized_table, final_summarized_table$Measurement)
+
+for (category_name in names(splitted_summary)) {
+  assign(paste0("df_", category_name), splitted_summary[[category_name]])
+}
+
+
+col_to_take_for_table <- c(2,3,5:8)
+
+
+df_BC %>% 
+   mutate(ymin = `Mean Difference`- `SD Difference`,
+                 ymax = `Mean Difference` + `SD Difference`) %>% 
+   ggplot(aes(fsample_size, `Mean Difference`, group = risk_distribution_transl, col = risk_distribution_transl))+
+   geom_line(linewidth = 1.05)+
+   geom_point(size = 1.8)+
+   theme_bw()+
+   scale_color_manual(values = colors)+
+   theme(legend.position = "none",
+         legend.title = element_blank(),
+         legend.direction = "horizontal",
+         strip.text = element_blank(),
+         #strip.placement = "top",
+         legend.key.size = unit(2.4, "lines"),
+         legend.key = element_rect(fill = "transparent"),
+         legend.box.background = element_blank(),
+         legend.background = element_blank(),
+         legend.text = element_text(size = 14.5))+
+   geom_hline(yintercept = 0 , col="black", linetype= "dashed", linewidth = 1.1)+
+   geom_errorbar(aes(ymin = ymin, ymax = ymax, width = .2)) +
+   facet_grid(rows = vars(risk_distribution_transl) )+
+   xlab("Sample Size")+
+   ylab('Difference to "True" Score')+
+   #scale_y_continuous(breaks = c(-.1, -0.5, 0, .05, .1, .15, .2))
+   #annotate("text", x = length(sample_sequence)/2, y =.2 , color = colors[1], label = unique(risk_distribution_transl[1]))
+   geom_text(aes(x =length(sample_sequence)/2, y = quantile(ymax, probs =.85)+.1, label = risk_distribution_transl), size = 6.5)+
+   scale_y_continuous(limits = c(-.1, .25))
+   
+
+```
+
+### Table
+
+```{r}
+df_BC[,col_to_take_for_table] %>% 
+   mutate_at(3:6, .funs = ~round(., digits = 3))%>% 
+   paged_table(options = list(rownames.print = F, rows.print = length(sample_sequence)))
+```
+
+## Polarization {.tabset}
+
+### Plot
+
+```{r}
+df_Polarization %>% 
+   mutate(ymin = `Mean Difference`- `SD Difference`,
+          ymax = `Mean Difference` + `SD Difference`) %>% 
+   ggplot(aes(fsample_size, `Mean Difference`, group = risk_distribution_transl, col = risk_distribution_transl))+
+   geom_line(linewidth = 1.05)+
+   geom_point(size = 1.8)+
+   theme_bw()+
+   scale_color_manual(values = colors)+
+   theme(legend.position = "none",
+         legend.title = element_blank(),
+         legend.direction = "horizontal",
+         strip.text = element_blank(),
+         #strip.placement = "top",
+         legend.key.size = unit(2.4, "lines"),
+         legend.key = element_rect(fill = "transparent"),
+         legend.box.background = element_blank(),
+         legend.background = element_blank(),
+         legend.text = element_text(size = 14.5))+
+   geom_hline(yintercept = 0 , col="black", linetype= "dashed", linewidth = 1.1)+
+   geom_errorbar(aes(ymin = ymin, ymax = ymax, width = .2)) +
+   facet_grid(rows = vars(risk_distribution_transl) )+
+   xlab("Sample Size")+
+   ylab('Difference to "True" Score')+
+   #scale_y_continuous(breaks = c(-.1, -0.5, 0, .05, .1, .15, .2))
+   #annotate("text", x = length(sample_sequence)/2, y =.2 , color = colors[1], label = unique(risk_distribution_transl[1]))
+   geom_text(aes(x =length(sample_sequence)/2, y = quantile(ymax, probs =.85)+.1, label = risk_distribution_transl), size = 6.5)+
+   scale_y_continuous(limits = c(-.05, .25))
+```
+
+### Table
+
+```{r}
+df_Polarization[,col_to_take_for_table] %>% 
+   mutate_at(3:6, .funs = ~round(., digits = 3))%>%
+   paged_table(options = list(rownames.print = F, rows.print = length(sample_sequence)))
+```
+
+## Coverage {.tabset}
+
+### Plot
+
+```{r}
+df_Coverage %>% 
+   mutate(ymin = `Mean Difference`- `SD Difference`,
+          ymax = `Mean Difference` + `SD Difference`) %>% 
+   ggplot(aes(fsample_size, `Mean Difference`, group = risk_distribution_transl, col = risk_distribution_transl))+
+   geom_line(linewidth = 1.05)+
+   geom_point(size = 1.8)+
+   theme_bw()+
+   scale_color_manual(values = colors)+
+   theme(legend.position = "none",
+         legend.title = element_blank(),
+         legend.direction = "horizontal",
+         strip.text = element_blank(),
+         #strip.placement = "top",
+         legend.key.size = unit(2.4, "lines"),
+         legend.key = element_rect(fill = "transparent"),
+         legend.box.background = element_blank(),
+         legend.background = element_blank(),
+         legend.text = element_text(size = 14.5))+
+   geom_hline(yintercept = 0 , col="black", linetype= "dashed", linewidth = 1.1)+
+   geom_errorbar(aes(ymin = ymin, ymax = ymax, width = .2)) +
+   facet_grid(rows = vars(risk_distribution_transl) )+
+   xlab("Sample Size")+
+   ylab('Difference to "True" Score')+
+   #scale_y_continuous(breaks = c(-.1, -0.5, 0, .05, .1, .15, .2))
+   #annotate("text", x = length(sample_sequence)/2, y =.2 , color = colors[1], label = unique(risk_distribution_transl[1]))
+   geom_text(aes(x =length(sample_sequence)/2, y = quantile(ymax, probs =.85)+.1, label = risk_distribution_transl), size = 6.5)+
+   scale_y_continuous(limits = c(-.1, .2))
+```
+
+### Table
+
+```{r}
+df_Coverage[,col_to_take_for_table] %>% 
+   mutate_at(3:6, .funs = ~round(., digits = 3))%>%
+   paged_table(options = list(rownames.print = F, rows.print = length(sample_sequence)))
+```
+
+## Dispersion {.tabset}
+
+### Plot
+
+```{r}
+df_Dispersion %>% 
+   mutate(ymin = `Mean Difference`- `SD Difference`,
+          ymax = `Mean Difference` + `SD Difference`) %>% 
+   ggplot(aes(fsample_size, `Mean Difference`, group = risk_distribution_transl, col = risk_distribution_transl))+
+   geom_line(linewidth = 1.05)+
+   geom_point(size = 1.8)+
+   theme_bw()+
+   scale_color_manual(values = colors)+
+   theme(legend.position = "none",
+         legend.title = element_blank(),
+         legend.direction = "horizontal",
+         strip.text = element_blank(),
+         #strip.placement = "top",
+         legend.key.size = unit(2.4, "lines"),
+         legend.key = element_rect(fill = "transparent"),
+         legend.box.background = element_blank(),
+         legend.background = element_blank(),
+         legend.text = element_text(size = 14.5))+
+   geom_hline(yintercept = 0 , col="black", linetype= "dashed", linewidth = 1.1)+
+   geom_errorbar(aes(ymin = ymin, ymax = ymax, width = .2)) +
+   facet_grid(rows = vars(risk_distribution_transl) )+
+   xlab("Sample Size")+
+   ylab('Difference to "True" Score')+
+   #scale_y_continuous(breaks = c(-.1, -0.5, 0, .05, .1, .15, .2))
+   #annotate("text", x = length(sample_sequence)/2, y =.2 , color = colors[1], label = unique(risk_distribution_transl[1]))
+   geom_text(aes(x =length(sample_sequence)/2, y = quantile(ymax, probs =.85)+.13, label = risk_distribution_transl), size = 6.5)+
+   scale_y_continuous(limits = c(-.05, .35))
+```
+
+### Table
+
+```{r}
+df_Dispersion[,col_to_take_for_table] %>% 
+   mutate_at(3:6, .funs = ~round(., digits = 3))%>%
+   paged_table(options = list(rownames.print = F, rows.print = length(sample_sequence)))
+```
+
+## Group Divergence {.tabset}
+
+### Plot
+
+```{r}
+df_Group_Divergence %>% 
+   mutate(ymin = `Mean Difference`- `SD Difference`,
+          ymax = `Mean Difference` + `SD Difference`) %>% 
+   ggplot(aes(fsample_size, `Mean Difference`, group = risk_distribution_transl, col = risk_distribution_transl))+
+   geom_line(linewidth = 1.05)+
+   geom_point(size = 1.8)+
+   theme_bw()+
+   scale_color_manual(values = colors)+
+   theme(legend.position = "none",
+         legend.title = element_blank(),
+         legend.direction = "horizontal",
+         strip.text = element_blank(),
+         #strip.placement = "top",
+         legend.key.size = unit(2.4, "lines"),
+         legend.key = element_rect(fill = "transparent"),
+         legend.box.background = element_blank(),
+         legend.background = element_blank(),
+         legend.text = element_text(size = 14.5))+
+   geom_hline(yintercept = 0 , col="black", linetype= "dashed", linewidth = 1.1)+
+   geom_errorbar(aes(ymin = ymin, ymax = ymax, width = .2)) +
+   facet_grid(rows = vars(risk_distribution_transl) )+
+   xlab("Sample Size")+
+   ylab('Difference to "True" Score')+
+   #scale_y_continuous(breaks = c(-.1, -0.5, 0, .05, .1, .15, .2))
+   #annotate("text", x = length(sample_sequence)/2, y =.2 , color = colors[1], label = unique(risk_distribution_transl[1]))
+   geom_text(aes(x =length(sample_sequence)/2, y = quantile(ymax, probs =.85)+.24, label = risk_distribution_transl), size = 6.5)
+```
+
+### Table
+
+```{r}
+df_Group_Divergence[,col_to_take_for_table] %>% 
+   mutate_at(3:6, .funs = ~round(., digits = 3))%>%
+   paged_table(options = list(rownames.print = F, rows.print = length(sample_sequence)))
+```
+
+## Polarization Index {.tabset}
+
+### Plots
+
+```{r}
+df_Polarization_Index %>% 
+   mutate(ymin = `Mean Difference`- `SD Difference`,
+          ymax = `Mean Difference` + `SD Difference`) %>% 
+   ggplot(aes(fsample_size, `Mean Difference`, group = risk_distribution_transl, col = risk_distribution_transl))+
+   geom_line(linewidth = 1.05)+
+   geom_point(size = 1.8)+
+   theme_bw()+
+   scale_color_manual(values = colors)+
+   theme(legend.position = "none",
+         legend.title = element_blank(),
+         legend.direction = "horizontal",
+         strip.text = element_blank(),
+         #strip.placement = "top",
+         legend.key.size = unit(2.4, "lines"),
+         legend.key = element_rect(fill = "transparent"),
+         legend.box.background = element_blank(),
+         legend.background = element_blank(),
+         legend.text = element_text(size = 14.5))+
+   geom_hline(yintercept = 0 , col="black", linetype= "dashed", linewidth = 1.1)+
+   geom_errorbar(aes(ymin = ymin, ymax = ymax, width = .2)) +
+   facet_grid(rows = vars(risk_distribution_transl) )+
+   xlab("Sample Size")+
+   ylab('Difference to "True" Score')+
+   #scale_y_continuous(breaks = c(-.1, -0.5, 0, .05, .1, .15, .2))
+   #annotate("text", x = length(sample_sequence)/2, y =.2 , color = colors[1], label = unique(risk_distribution_transl[1]))
+   geom_text(aes(x =length(sample_sequence)/2, y = quantile(ymax, probs =.85)+.1, label = risk_distribution_transl), size = 6.5)+
+   scale_y_continuous(limits = c(-.1, .2))
+```
+
+### Table
+
+```{r}
+df_Polarization_Index[,col_to_take_for_table] %>% 
+   mutate_at(3:6, .funs = ~round(., digits = 3))%>%
+   paged_table(options = list(rownames.print = F, rows.print = length(sample_sequence)))
+```
+
+## Size Parity {.tabset}
+
+### Plots
+
+```{r}
+df_Size_Parity %>% 
+   mutate(ymin = `Mean Difference`- `SD Difference`,
+          ymax = `Mean Difference` + `SD Difference`) %>% 
+   ggplot(aes(fsample_size, `Mean Difference`, group = risk_distribution_transl, col = risk_distribution_transl))+
+   geom_line(linewidth = 1.05)+
+   geom_point(size = 1.8)+
+   theme_bw()+
+   scale_color_manual(values = colors)+
+   theme(legend.position = "none",
+         legend.title = element_blank(),
+         legend.direction = "horizontal",
+         strip.text = element_blank(),
+         #strip.placement = "top",
+         legend.key.size = unit(2.4, "lines"),
+         legend.key = element_rect(fill = "transparent"),
+         legend.box.background = element_blank(),
+         legend.background = element_blank(),
+         legend.text = element_text(size = 14.5))+
+   geom_hline(yintercept = 0 , col="black", linetype= "dashed", linewidth = 1.1)+
+   geom_errorbar(aes(ymin = ymin, ymax = ymax, width = .2)) +
+   facet_grid(rows = vars(risk_distribution_transl) )+
+   xlab("Sample Size")+
+   ylab('Difference to "True" Score')+
+   #scale_y_continuous(breaks = c(-.1, -0.5, 0, .05, .1, .15, .2))
+   #annotate("text", x = length(sample_sequence)/2, y =.2 , color = colors[1], label = unique(risk_distribution_transl[1]))
+   geom_text(aes(x =length(sample_sequence)/2, y = quantile(ymax, probs =.1)-.15, label = risk_distribution_transl), size = 6.5)+
+   scale_y_continuous(limits = c(-.2, .1))
+```
+
+### Table
+
+```{r}
+df_Size_Parity[,col_to_take_for_table] %>% 
+   mutate_at(3:6, .funs = ~round(., digits = 3))%>%
+   paged_table(options = list(rownames.print = F, rows.print = length(sample_sequence)))
+```
+
+# Discussion
+
+It seems like that there is a certain pattern in the plots:  
+
+- As expected, the higher the sample size increases, the more the differences between the sample and the population converges to 0, meaning that we get a more accurate estimate.  
+
+- Likewise, the error bars decline with increasing sample size.  
+
+- The different polarization measures have different strengths and weaknesses:  
+   - Almost all measures were able to accurately estimate the true score on the [**normal distribution**]{style="color: `r colors[1]`;"}, except for *size parity*. Considering that this measure uses group sizes of low vs high values split by the midpoint of a scale, setting the mean of the normal distribution to the midpoint was a detriment to this measure.  
+   - *Size parity* struggles with the [**skewed beta distribution**]{style="color: `r colors[2]`;"} as well. It seems like partitioning the ratings into halves has its disadvantages when sampling from something that is skewed like that.  
+   - Looking at the [**mixed distribution**]{style="color: `r colors[3]`;"}, the *bimodality coefficient, coverage and group divergence* had rather big error bars.  
+   - Looking at the [**symmetric beta distribution**]{style="color: `r colors[4]`;"}, the *polarization, dispersion, polarization index and size parity* were off for smaller and even medium sample sizes.  
+
+
+- Overall, the mixed and symmetric beta distributions were the most difficult for our candidate measures to approximate to the "true score". Sadly, these are the distributions which most would call polarized, and which the study wants to uncover. Therefore, a greater number of ratings is advised to reliable estimate the extend of polarization in the population.  
+
+Being able to estimate the population with our measures is good and all, but one important aspect of choosing a measure also includes how much variability it has in different risks. For example, if a measure indicates a polarization value of .5 for different risks (hence low variability), is our chosen measure good because we can detect the true score in the population with even small samples (as the comparison of sample and true score was derived from the same method)? Or is it outright bad because it is agnostic towards most risks and thus does not detect the different nuances of a risk distribution? The best example here would be to look at the measure *coverage* in our true score distributions. It scored the best out of all the measures when only looking at the difference to the "true score", but on a closer look, does not differentiate between the [**symmetric beta**]{style="color: `r colors[4]`;"} and the [**normal distributions**]{style="color: `r colors[1]`;"}, which most would think are totally different. Thus, coverage may not be a good measure for polarization (or at least not the way I see it).  
+
+Taking several measures as a operationalization of polarization is probably a better approach than banking our study with just one. As such, the author nominates the *bimodality coefficient, polarization and group divergence* as the go to measures for the upcoming study. These measures were taken because of the following reasons:  
+
+- These measures complement each other and compensate for each other's weaknesses:  
+   - The *bimodality coefficient* uses skewness and kurtosis, hence uses some sort of **asymmetry and "heaviness"** detection in a distribution. However, biases in the distribution can lead to biases in the aforementioned metrics as well, which screws the validity of this measure. Thus it is not perfectly sensitive and specific to assess bimodality.  
+   - The measure of *polarization* acts as a sort of **agreement measure** (summed weights of ordered bins). Its strengths is its biggest flaw, as it ignores minority groups even though they may also contribute to polarization (like our [**mixed distribution**]{style="color: `r colors[3]`;"}).  
+   - *Group divergence* is a measure which takes into account how big the (mean) **distance between two sides** of a midpoint is. The problem of this metric is that it is agnostic to the exact distribution and group sizes.  
+- Are able to differentiate between different types of distributions.  
+- While also being somewhat usable as a standalone measure.  
+
+Additionally, the *bimodality coefficient* has a mathematically derived threshold of around $0.\overline{5}$. Distributions under this threshold can be taken as an indication towards unimodality, whereas values above this threshold can be seen as an **indicator towards bimodality**, something akin to polarization. Though, as already mentioned, it also has some [limitations](https://www.frontiersin.org/journals/psychology/articles/10.3389/fpsyg.2013.00700/full)...  
+
+With these 3 measures, the author argues for at least 100 ratings per risk.... Though it does not seem like this work was of any help at all concerning power analysis...  
+
+On another note, detecting polarization also depends (as mentioned many times before) on the underlying distribution. The measures are only tools to detect whether something is polarized, but when something is not polarized, there can be different reasons:  
+  
+- The sample size was too small to uncover polarization.  
+- The measure can not detect polarization.  
+- The risk itself is polarized, but only in a (unknown) subgroup.  
+- The risk itself is not polarized.  
+
+In accordance with the third point raised above, the decision how to sample from the population functions as a sort of window placement. One can zoom in and out (e.g. increase sample size and therefore power), but when the window was set in a sub optimal way, it gets even more difficult to sample the right people with differing opinion.  
+
+## Limitations
+
+-   Scale limits in samples had to be rounded so some measures can be calculated, which may not be appropriate (e.g. 0.073657 to 0.07). Though our ratings are discrete as well, so this may even be more ecologicaly valid.\
+-   While the values of the samples were rounded, the values in the population were not. This should not make a difference from a **mathematical** perspective for the measures (more granular/ finer detail). It may, however, hinder the comparison to our calculated measures in the simulated samples.\
+-   Only `r nrow(df)` risk distributions were simulated.\
+-   Spread and Group Distinctness were left out in this simulation.  
+- The simulation used a scale of 0 to 1 with increments of 0.01, which also translates to 101 different scales. Whether the results still holds for less granular scales is up for debate.  
+- As mentioned in the method section, the Monte Carlo approach lives and falls with the underlying distribution, which we assume is also present in the population. But as all things in life, the distributions may look completely different. Irregularities and discontinuities may even be the norm than the exception.  
+- Interpreting such a work is a first for me, please be wary of my possibly biased view in this. This is also reflected in the low count in the references, where I argue mostly with the data and intuition, which is subjective. Please formulate your own opinion on this matter!  
+
+
+## Conclusions
+
+- No "one size fits all" measure, but three candidate measures of *bimodality coefficient, polarization and group divergence* were nominated.    
+- No clear cut answer for how many participants should be sampled.  
+- While sample size plays a key role in detecting polarization, sampling from a population where we assume polarization to be more present is an even more important factor, as it technically sets the "base rate" of differing opinions.  
+
+
+# Credits
+
+## Acknowledgements and others
+
+This work was done within 2 weeks in context of the master project in my MSc. in psychology at the university of Basel within the [CDS](https://psychologie.unibas.ch/de/fakultaet/abteilungen/cognitive-and-decision-sciences-305/) department.  
+
+I thank Prof. Dr. Rui Mata for the supervision and continued guidance in the master project.  
+
+In addition, I would like to extend my appreciation to the members in the risk polarization group, namely:  
+  
+  
+ - Goetz, Fabienne  
+ - Leutwyler, Vanessa  
+ - Lichtner, Lukas  
+ - Rosa, Flavia  
+ - Willi, Noah  
+
+The code used for this work can be downloaded in the upper right corner in the beginning of this HTML file.  
+In case you have other questions or remarks, feel free to contact me under: [andy.cao@unibas.ch](mailto:andy.cao@unibas.ch)  
+~~Please refrain from criticizing this work for not conforming to APA style guidelines, reporting in a non-scientific manner, and formatting choices.~~
+
+Lastly, I would like to thank those who read this whole work from top to bottom. Simultaneously though, I would like to apologize for my ~~wall of text~~ odd choice of words here and there.
+
+## R Packages used
+
+- agrmt (Ruedin D (2023). _agrmt: Calculate Concentration and Dispersion in Ordered Rating Scales_. R package version 1.42.12,
+<https://CRAN.R-project.org/package=agrmt>.)  
+
+- doParallel (Corporation M, Weston S (2022). _doParallel: Foreach Parallel Adaptor for the 'parallel' Package_. R package version 1.0.17,
+<https://CRAN.R-project.org/package=doParallel>.)  
+
+- foreach (Microsoft, Weston S (2022). _foreach: Provides Foreach Looping Construct_. R package version 1.5.2, <https://CRAN.R-project.org/package=foreach>.)  
+
+- knitr (Xie Y (2023). _knitr: A General-Purpose Package for Dynamic Report Generation in R_. R package version 1.45, <https://yihui.org/knitr/>.)  
+
+- psych (William Revelle (2023). _psych: Procedures for Psychological, Psychometric, and Personality Research_. Northwestern University, Evanston, Illinois. R
+package version 2.3.9, <https://CRAN.R-project.org/package=psych>.)  
+
+- RColorBrewer (Neuwirth E (2022). _RColorBrewer: ColorBrewer Palettes_. R package version 1.1-3, <https://CRAN.R-project.org/package=RColorBrewer>.)  
+
+- rmarkdown (Allaire J, Xie Y, Dervieux C, McPherson J, Luraschi J, Ushey K, Atkins A, Wickham H, Cheng J, Chang W, Iannone R (2023). _rmarkdown: Dynamic
+Documents for R_. R package version 2.25, <https://github.com/rstudio/rmarkdown>.)  
+
+- tidyverse (Wickham H, Averick M, Bryan J, Chang W, McGowan LD, François R, Grolemund G, Hayes A, Henry L, Hester J, Kuhn M, Pedersen TL, Miller E, Bache SM,
+Müller K, Ooms J, Robinson D, Seidel DP, Spinu V, Takahashi K, Vaughan D, Wilke C, Woo K, Yutani H (2019). “Welcome to the tidyverse.” _Journal of
+Open Source Software_, *4*(43), 1686. doi:10.21105/joss.01686 <https://doi.org/10.21105/joss.01686>.)  
+
+- visdat (Tierney N (2017). “visdat: Visualising Whole Data Frames.” _JOSS_, *2*(16), 355. doi:10.21105/joss.00355 <https://doi.org/10.21105/joss.00355>,
+<http://dx.doi.org/10.21105/joss.00355>.)  
+  
+
+
+## Use of AI
+
+ChatGPT 3.5 (OpenAI. 2023, https://chat.openai.com/chat):  
+
+- Giving the exoskeleton for parallel computation using multiple cores and foreach packages.  
+- Pointing the author towards the "cut" function for converting numerical values to ordered factors used for coverage and polarization measures.  
+- Overall rmarkdown syntax like coloring, css styling and writing periodic numbers.  
+- Writing efficient code.  
+- Reformulation of some sentences in the introduction section, the explanation of Monte Carlo simulation, as well as some parts of the conclusion section.  
+
+## References
+
+- Fischer, O., & Frey, R. (2023). The many flavors of polarization: A systematic comparison of different conceptualizations and contexts. https://doi.org/10.31234/osf.io/bv496  
+- Pfister, R., Schwarz, K. A., Janczyk, M., Dale, R., & Freeman, J. (2013). Good things peak in pairs: A note on the bimodality coefficient. *Frontiers in Psychology, 4*. https://doi.org/10.3389/fpsyg.2013.00700  
+- Van Der Eijk, C. (2001). Measuring agreement in ordered rating scales. *Quality & Quantity 35, 325–341*. https://doi.org/10.1023/A:1010374114305  
