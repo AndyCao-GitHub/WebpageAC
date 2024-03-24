@@ -25,4 +25,6 @@ navbar:
            href: 404-Not-Found.html
          - text: "Evolutionäre Persönlichkeitstheorie"
            href: 404-Not-Found.html
+         - text: "Risk Polarization Power Analysis"
+           href: 404-Not-Found.html
 output: distill::distill_article
