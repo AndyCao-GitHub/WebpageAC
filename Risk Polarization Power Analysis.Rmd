@@ -1,0 +1,56 @@
+---
+title: "Risk Polarization Power Analysis"
+author: "Andy Cao"
+date: "`r Sys.Date()`"
+output: 
+   html_document:
+      css: styles.css
+      toc: true
+      number_sections: false
+      toc_float: true
+      collapsed: true
+      smooth_controll: false
+      fig.width: 26
+      fig.height: 26
+      code_download: true
+---
+
+# Power Analysis
+
+## Introduction
+
+This work builds on my [first (and failed) attempt](Risk-Polarization-Simulation.html) to estimate how many ratings one needs to sample to have a reliable measure of a certain population. Therefore, readers are advised to catch up on my previous work to be up to speed on this smaller project.  
+
+As the unconventional approach did not work, we will revert back to the more "old school" methodologies of a a priori power analysis. That is, estimating the minimum sample size needed to uncover a set effect size (or bigger), given a significance level and type II (false negatives) error.  
+
+## Method
+
+Given the novel nature of our upcoming study, these assumptions were made accordingly:  
+
+- As we have no real consensus what polarization entails, getting a numerical quantifier for the effect size seems to be 
+
+
+
+
+
+
+We will work with the same sampled matrix again
+
+```{r}
+population <- 10^5
+prop_minority <- .02
+
+# Create a grid of parameters
+beta_param <- data.frame( param_1 = c( 2, .1),
+            param_2 = c(.6, .1))
+# set the seed, so everything here is replicable
+set.seed(42)
+
+# Generate random data from beta distributions with different parameters
+data <- map2(beta_param$param_1, beta_param$param_2, ~ rbeta(population, .x, .y))
+
+df <- as.data.frame(data)
+```
+
+
+

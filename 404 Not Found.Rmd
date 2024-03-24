@@ -11,4 +11,4 @@ knitr::opts_chunk$set(echo = FALSE)
 ```
 
 ![](pictures/Under construction_.gif)
-<span style="font-size: small;">source: [From: Dribbble](https://www.pinterest.ch/pin/176977460341776988/)</span>
+<span style="font-size: small;">From:[Dribbble](https://www.pinterest.ch/pin/176977460341776988/)</span>
