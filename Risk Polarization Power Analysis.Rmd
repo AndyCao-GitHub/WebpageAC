@@ -23,33 +23,60 @@ This work builds on my [first (and failed) attempt](Risk-Polarization-Simulation
 
 As the unconventional approach did not work, we will revert back to the more "old school" methodologies of a a priori power analysis. That is, estimating the minimum sample size needed to uncover a set effect size (or bigger), given a significance level and type II (false negatives) error.  
 
+
+
 ## Method
 
 Given the novel nature of our upcoming study, these assumptions were made accordingly:  
 
 - As we have no real consensus what polarization entails, getting a numerical quantifier for the effect size seems to be 
 
+Additionally, the group has chosen to employ a 11-point likert scale instead of the previously used 101. So we will create our "distributions".
 
-
-
-
-
-We will work with the same sampled matrix again
 
 ```{r}
-population <- 10^5
-prop_minority <- .02
+n_scale_on_likert <- 11
+n_population <- 10^4
 
-# Create a grid of parameters
-beta_param <- data.frame( param_1 = c( 2, .1),
-            param_2 = c(.6, .1))
-# set the seed, so everything here is replicable
-set.seed(42)
+#create primitive function for easier distribution creation, input should be percentages!
+create_discr_dist <- function(p1, p2, p3, p4, p5, p6, p7, p8, p9, p10){
+   
+   summed_probs <- sum(c(p1,p2,p3, p4, p5,p6,p7,p8,p9,p10)/100, na.rm = TRUE)
+   
+   if(summed_probs > 1){
+      return("summed probabilities is greater than 1, please reconsider")
+   }
+   else (p11 <-  1-summed_probs)
+   
+   vec =c(rep_len(1, p1*n_population / 100),
+          rep_len(2, p2*n_population / 100),
+          rep_len(3, p3*n_population / 100),
+          rep_len(4, p4*n_population / 100),
+          rep_len(5, p5*n_population / 100),
+          rep_len(6, p6*n_population / 100),
+          rep_len(7, p7*n_population / 100),
+          rep_len(8, p8*n_population / 100),
+          rep_len(9, p9*n_population / 100),
+          rep_len(10, p10*n_population / 100),
+          rep_len(11, p11*n_population)
+          )
+   
+   return(as.data.frame(vec))
+}
 
-# Generate random data from beta distributions with different parameters
-data <- map2(beta_param$param_1, beta_param$param_2, ~ rbeta(population, .x, .y))
+dist1 <- create_discr_dist(50,0,0,
+                          0,0,0,
+                          0,0,0,0)
 
-df <- as.data.frame(data)
+
+dist2 <- create_discr_dist(30,15,5,
+                          0,0,0,
+                          0,0,5,15)
+
+dist3 <- create_discr_dist(20,15,8,
+                          4,3,0,
+                          3,4,8,15)
+
 ```
 
 
