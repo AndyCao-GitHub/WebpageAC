@@ -4,7 +4,7 @@ author: "Andy Cao"
 date: "`r Sys.Date()`"
 output: 
    html_document:
-      css: styles.css
+      #css: styles.css
       toc: true
       number_sections: false
       toc_float: true
