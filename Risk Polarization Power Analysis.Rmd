@@ -15,12 +15,15 @@ output:
       code_download: true
 ---
 ```{r Setup, include=FALSE}
-library(tidyverse)
-library(RColorBrewer)
-library(psych)
-library(agrmt)
-library(doParallel)
-library(foreach)
+library(tidyverse) #data wrangling and other tools for R
+library(knitr) # report generation in R
+library(psych) #calculate skew and kurtosis for BC
+library(agrmt) #for agreement and polarization calculation
+library(visdat) #visualize dataframes in plots
+library(RColorBrewer) #easy to use color palettes
+library(rmarkdown) #for the paged_table function
+library(doParallel) #parallel computation using multiple cores
+library(foreach) # for each function, so the simulation does not take ages
 
 colors <- brewer.pal(4, "Dark2")
 
@@ -28,13 +31,17 @@ n_scale_on_likert <- c(1:11)
 min_likert <- min(n_scale_on_likert)
 max_likert <- max(n_scale_on_likert)
 
-sample_sequence <- c(seq(80,200,by =10), seq(300,1000, by = 100))
+sample_sequence <- seq(10,200,by =10)
 sampled <- data.frame(N_part = sample_sequence)
 
-replications_per_setting <- 100
+replications_per_setting <- 200
 
 n_population <- 10^4
 prop_minority <- .05
+
+BC_threshold <- 5/9
+polarization_threshold <- .5
+group_divergence_threshold <- .5
 
 #set seed so every random thing here is reproducible
 set.seed(42)
@@ -91,7 +98,7 @@ Pop_df <- data.frame(`Normal Distribution`= normal,
                      `Rare Polarization` = rare,
                      `Strong Polarization` = strong_pol)
 
-names(Pop_df) <- c("None", "Rare", "Small Pol.", "Strong Pol.")
+names(Pop_df) <- c("None", "Small Pol.", "Rare", "Strong Pol.")
 
 
 
@@ -121,9 +128,8 @@ sample_sequence
   
 For each sample size, we replicate the random draw ``r replications_per_setting`` times. For each of the samples, the measures of bimodality coefficient (BC), polarization and group divergence are calculated. Similar to classification problems though, we will have to set thresholds for each measure, where values above a threshold indicate polarization, while those falling below indicate the absence of polarization. Luckily, the BC already has a set threshold of $0.\overline{5}$. 
 
-For the two other measures, I looked at the previous results, and the measurement of polarization has a low value for the rare distribution, even lower than the normal distribution (as it uses a weighted sum, thus small groups are discounted). Setting a low threshold so rare distributions are also classified as polarized will therefore also net us too many false negatives (e.g. saying normal distributions are polarized). I'll set the threshold arbitrarily at .5, and see how it goes...  
+For the two other measures, I looked at the previous results, and the measurement of polarization has a low value for the rare distribution, even lower than the normal distribution (as it uses a weighted sum, thus small groups are discounted). Setting a low threshold so rare distributions are also classified as polarized will therefore also net us too many false negatives (e.g. saying normal distributions are polarized). I'll set the group divergence threshold arbitrarily at ``r group_divergence_threshold`` and polarization threshold at ``r polarization_threshold`` and see how it goes...  
 
-## Results
 ```{r Sampling}
 max_cols <- max(sampled)   
 
@@ -144,7 +150,7 @@ sample_and_replicate_for_all_risks <- function(i) {
     mat <- replicate(replications_per_setting,
                      sample(1:n_population, size = sampled[i, 1], replace = TRUE)) #create matrix of our samples with replacing, times n - replications
     
-    sampled_table <- df[j, mat] #using the matrix, collect the values from our risk distribution matrix (as a vector though...)
+    sampled_table <- rot_Pop_df[j, mat] #using the matrix, collect the values from our risk distribution matrix (as a vector though...)
     sampled_matrix <- as.data.frame(matrix(sampled_table,
                                            nrow = replications_per_setting,
                                            ncol = sampled[i, 1],
@@ -177,13 +183,174 @@ result <- foreach(i = 1:nrow(sampled), .combine = rbind) %dopar% {
 
 # Stop the parallel backend
 stopCluster(cl)
+
+result <- mutate_all(result, as.numeric )
+
+
+vis_miss(result[,seq(from =3, to = ncol(result), length.out = 40)], show_perc_col = F)
+```  
+  
+Again, this is how our sampled matrix looks like, adopting a staircase like shape. Using this method saves us time, as well as prevents errors.  
+
+```{r Calculating Polarisation Measures}
+#taken from my previous work
+calc_group_divergence <- function(vec, midpoint = 6, scale_range = 11){
+   
+   X_high <- mean(vec[vec >= midpoint], na.rm = TRUE)
+   if(sum(vec[vec >= midpoint], na.rm =T ) == 0){
+      X_high <- 0
+   }
+   
+   X_low <-  mean(vec[vec < midpoint], na.rm = TRUE)
+   if(sum(vec[vec < midpoint], na.rm =T ) == 0){
+      X_low <- 0
+   }
+   return((abs(X_high - X_low)/ scale_range))
+}
+
+
+calc_bimodality_coefficient <- function(vec){
+   skew <- skew(vec, na.rm = TRUE, type = 3)
+   kurtosis <- kurtosi(vec, na.rm = TRUE, type = 3)
+   n <- sum(!is.na(vec))
+   return((skew^2+1) / (kurtosis + ((3*((n-1))^2)/((n-2)*(n-3))) ))
+}
+
+# Created this one "from scratch", as we work with a smaller scale of 11 instead of 101, the calculation of polarization does not take too long anymore
+
+calc_polarization <- function(vec){
+   vec2 <- as.vector(vec)
+   freq_vec <- agrmt::collapse(vec2, pos = c(1:11))
+   return(agrmt::polarization(freq_vec))
+}
+
+# this code is commented, as the computation takes too long, and I hate waiting while kniting. I have saved a sepparate rds file, which will be read in instead. Readers who want to uncomment section, select the lines to uncomment and press Ctrl + Shift + C (on Windows/Linux) or Cmd + Shift + C (on macOS)
+
+#apply the functions to our result matrix, therefore calculate for each drawn sample the polarization metrics
+# BC_result <- apply(result[,-c(1:2)], 1, calc_bimodality_coefficient)
+# sum(is.na(BC_result))
+# 
+# group_divergence_result <- apply(result[,-c(1:2)], 1, calc_group_divergence)
+# sum(is.na(group_divergence_result))
+# 
+# # Register parallel backend with the desired number of cores
+# num_cores <- detectCores()-1
+# 
+# cl <- makeCluster(num_cores)
+# registerDoParallel(cl)
+# 
+# # Perform parallel processing using foreach, iterating through the different drawn samples
+# polarization_result <- foreach(i = 1:nrow(result), .combine = rbind) %dopar% {
+#   calc_polarization(result[i, -c(1:2)])
+# }
+# sum(is.na(polarization_result))
+# 
+# # Stop the parallel backend
+# stopCluster(cl)
+# 
+# 
+# combined_result_measures <- cbind(polarization_result,
+#                                   group_divergence_result,
+#                                   BC_result,
+#                                   result[,1:2]
+#                                   )
+# sum(is.na(combined_result_measures))
+#
+# saveRDS(combined_result_measures, "saved_RDS\\combined_result_measures_power_analysis.rds")
+
+combined_result_measures <- readRDS("saved_RDS\\combined_result_measures_power_analysis.rds")
+
+vis_miss(combined_result_measures, sort_miss = F)
 ```
+  
+After we've calculated the operationalisation measures for each of the ``r nrow(result)`` drawn samples, the measures were put into a data frame. As we can see, no missing values are here, indicating that each measure was calculated successfully.  
+
+## Results {.tabset .tabset-pills}
+
+### Polarization Values for the Population Distribution
+
+```{r Display Polarization Measures for all Distributions}
+BC_pop <- apply(rot_Pop_df, 1, calc_bimodality_coefficient)
+GD_pop <- apply(rot_Pop_df, 1, calc_group_divergence) 
+Pol_pop<- apply(rot_Pop_df, 1, calc_polarization)
+Pol_measures_pop <- data.frame(BC_pop, GD_pop, Pol_pop)
+Pol_measures_pop$`Pol. Distribution` <- rownames(Pol_measures_pop)
+
+Pol_measures_pop %>% 
+   select(`Pol. Distribution`, everything()) %>% 
+   kable(format = "html", 
+         caption = "Polarization Measures in the Population Distributions", 
+         digits = 3, 
+         col.names = c("Population Distribution", "Bimodality Coefficient", "Group Divergence", "Polarization"), 
+         align = "c",
+         row.names = FALSE) %>% 
+   kableExtra::row_spec(row = 0, angle = -10)
+```
+
+### Drawn Sample Table 
+```{r Create Dichotome factor of Polarized and None, warning=FALSE, message=FALSE}
+#for each measure, use the threshold defined in the methods section
+combined_result_measures <- combined_result_measures %>% 
+   mutate(BC_Pol = if_else(BC_result >= BC_threshold, 1, 0),
+          polarization_Pol = if_else(polarization_result >= polarization_threshold, 1, 0),
+          group_divergence_Pol = if_else(group_divergence_result >= group_divergence_threshold, 1, 0),
+          transl_risk_distr = factor(risk_distribution, labels = c("None", "Rare", "Small Pol.", "Strong Pol.")),
+          transl_risk_distr = factor(transl_risk_distr, levels = c("None", "Small Pol.", "Rare", "Strong Pol.")))
+
+summarised_result_measures <- combined_result_measures %>% 
+   pivot_longer(contains("_Pol"), names_to = "Measure", values_to = "is_polarized") %>% 
+   mutate(Measure = str_remove(Measure, "_Pol")) %>%
+   group_by(Measure,transl_risk_distr, sample_size) %>% 
+   summarise(`Prop_as_polarized_in_%` = sum(is_polarized)/replications_per_setting * 100)
+
+summarised_result_measures %>%
+   pivot_wider(values_from = `Prop_as_polarized_in_%`,
+               names_from = Measure) %>% 
+   rename(`Polarization Grade` = transl_risk_distr, 
+          `Sample Size` = sample_size,
+          `Bimodality Coefficient` = BC,
+          `Group Divergence` = group_divergence,
+          Polarization = polarization) %>% 
+   paged_table(options = list(rownames.print = F,
+                              rows.print = length(sample_sequence),
+                              cols.min.print = 5))
+```
+### Overall Plot
+```{r Plot Results}
+
+summarised_result_measures %>% 
+   mutate(Measure = case_when(Measure == "BC"~ "Bimodal Coefficient",
+                    Measure == "group_divergence" ~ "Group Divergence",
+                    Measure == "polarization" ~ "Polarization")) %>% 
+   ggplot(aes(sample_size, `Prop_as_polarized_in_%`, col = transl_risk_distr, group = transl_risk_distr))+
+   geom_line(linewidth = .9)+
+   facet_grid(rows = vars(Measure))+
+   scale_x_continuous(breaks = sample_sequence)+
+   scale_color_manual(values = colors)+
+   theme_minimal()+
+   theme(legend.title = element_blank(),
+         strip.text = element_blank(),
+         legend.position = "top")+
+   geom_text(aes(x= sample_sequence[length(sample_sequence)/2+ 3],y = 50, label= Measure), size = 7, inherit.aes = FALSE)
+
+
+```
+
+## {- .tabset}
+
+```{r Individual Plots by Polarization Measure}
+summarised_result_measures %>% 
+   filter(Measure == "BC")
+   
+
+```
+
 
 
 
 ## Discussion
 
-### Limitation
+### Limitations
 as like in all classifications, no clear cut line between pol vs none, but gradual.
 
 in accordance to the previous one, setting the assumption that the rare polarization is, in fact, polarized, may not hold well in the study itself, as smaller outliers, misinterpretation or even a mouse slip may contribute to such a distribution, which we would then just assume is polarized.
@@ -191,3 +358,14 @@ in accordance to the previous one, setting the assumption that the rare polariza
 the treshhold were set somewhat arbitrary, and therefore, may not hold in the real deal, and cannot be generalized for further distributions, but only for the ones seen here. One might change the treshhold to find an optimized one where we would have the least false positives and false negatives, but this threshold will not generalize for other distributions. As such, I'll refrain from finding the optimum, as it would net us not any additional insight to our cause.
 
 only 3 measures of operatioalization was used, and thus, not every aspect of operationalization was covered.
+
+### Conclusions
+
+## Credits
+
+### Acknowledgements
+
+
+### R Packages Used
+
+### Use of AI

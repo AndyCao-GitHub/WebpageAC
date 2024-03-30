@@ -456,11 +456,11 @@ sum(is.na(BC_result))
 #   agrmt::polarization(freq_vec_results[i, ])
 # }
 # 
-#saveRDS(polarization_result, "polarisation_result.rds")
 # 
 # 
 # #polarization_result <- foreach(i = 1:nrow(result), result[,-(1:2)], 1, calc_polarization)
 # stopCluster(cl)
+# saveRDS(polarization_result, "polarisation_result.rds")
 
 
 
