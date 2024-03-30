@@ -14,70 +14,180 @@ output:
       fig.height: 26
       code_download: true
 ---
+```{r Setup, include=FALSE}
+library(tidyverse)
+library(RColorBrewer)
+library(psych)
+library(agrmt)
+library(doParallel)
+library(foreach)
 
+colors <- brewer.pal(4, "Dark2")
+
+n_scale_on_likert <- c(1:11)
+min_likert <- min(n_scale_on_likert)
+max_likert <- max(n_scale_on_likert)
+
+sample_sequence <- c(seq(80,200,by =10), seq(300,1000, by = 100))
+sampled <- data.frame(N_part = sample_sequence)
+
+replications_per_setting <- 100
+
+n_population <- 10^4
+prop_minority <- .05
+
+#set seed so every random thing here is reproducible
+set.seed(42)
+
+#set echo = FALSE (e.g. dont show code in output) for all chunks, except when explicitly telling otherwise
+knitr::opts_chunk$set(
+   echo = FALSE,
+   warning = TRUE,
+   message = TRUE
+   )
+```
 # Power Analysis
 
 ## Introduction
 
 This work builds on my [first (and failed) attempt](Risk-Polarization-Simulation.html) to estimate how many ratings one needs to sample to have a reliable measure of a certain population. Therefore, readers are advised to catch up on my previous work to be up to speed on this smaller project.  
 
-As the unconventional approach did not work, we will revert back to the more "old school" methodologies of a a priori power analysis. That is, estimating the minimum sample size needed to uncover a set effect size (or bigger), given a significance level and type II (false negatives) error.  
+As the unconventional approach did not work, we will revert back to the more "old school" methodologies of an a priori power analysis. That is, estimating the minimum sample size needed to uncover a set effect size (or bigger), given a significance level and type II (false negatives) error.  
 
 
 
 ## Method
 
-Given the novel nature of our upcoming study, these assumptions were made accordingly:  
+The group has chosen to employ a 11-point likert scale instead of the previously used 101. Therefore, this work will also employ this scale.  
 
-- As we have no real consensus what polarization entails, getting a numerical quantifier for the effect size seems to be 
+As we have no real consensus what polarization entails, getting a numerical quantifier for the effect size seems to be out of the question. 4 preset Distributions were chosen again, each with differing grade of polarization. For readers who feel familiar with the colors from my prior simulation, most of the distributions have adopted the same spirit from its predecessor, but some changes were made:  
 
-Additionally, the group has chosen to employ a 11-point likert scale instead of the previously used 101. So we will create our "distributions".
+- [**None**]{style="color: `r colors[1]`;"} (a Normal Distribution, but this time with a shifted mean instead of the midpoint)  
+- [**Small polarization**]{style="color: `r colors[2]`;"} (the skewed beta distribution from prior work was replaced with this one, representing a smaller polarization in the population)  
+- [**Rare**]{style="color: `r colors[3]`;"} (a majority rating on one extreme, while a minority group with base rate of ``r prop_minority *100`` on the other extreme)  
+- [**Strong polarization**]{style="color: `r colors[4]`;"} (still the symmetrical version, but this time in discrete shape)  
+
+It is important to note that while the normal and strong polarization distribution represent no and strong effects, the small and rare distributions should both illustrate small effects in the population, and putting one over the other really depends on how to interpret/ operationalize polarization itself (e.g. asymmetry, distance, or agreement).  
+
+```{r Generation of Population Distribution}
+
+normal <- round(rnorm(n_population, mean = 8,sd = 1.2))
+normal <- pmin(pmax(normal, min_likert), max_likert)
+
+strong_pol <- round(rbeta(n_population, shape1 = .1, shape2 = .1)*10) +1
+strong_pol <- pmin(pmax(strong_pol, min_likert), max_likert)
+
+rare <- c(round(rnorm(n_population *(1- prop_minority), mean = 2,sd = 1.3)), 
+           round(rnorm(n_population *prop_minority, mean = 11,sd = .5)))
+rare <- pmin(pmax(rare, min_likert), max_likert)
+
+small_pol <- c(round(rnorm(n_population *.65, mean = 6,sd = .9)), 
+           round(rnorm(n_population * .35, mean = 10,sd = .5)))
+small_pol <- pmin(pmax(small_pol, min_likert), max_likert)
 
 
-```{r}
-n_scale_on_likert <- 11
-n_population <- 10^4
+Pop_df <- data.frame(`Normal Distribution`= normal,
+                     `Small Polarization` = small_pol,
+                     `Rare Polarization` = rare,
+                     `Strong Polarization` = strong_pol)
 
-#create primitive function for easier distribution creation, input should be percentages!
-create_discr_dist <- function(p1, p2, p3, p4, p5, p6, p7, p8, p9, p10){
-   
-   summed_probs <- sum(c(p1,p2,p3, p4, p5,p6,p7,p8,p9,p10)/100, na.rm = TRUE)
-   
-   if(summed_probs > 1){
-      return("summed probabilities is greater than 1, please reconsider")
-   }
-   else (p11 <-  1-summed_probs)
-   
-   vec =c(rep_len(1, p1*n_population / 100),
-          rep_len(2, p2*n_population / 100),
-          rep_len(3, p3*n_population / 100),
-          rep_len(4, p4*n_population / 100),
-          rep_len(5, p5*n_population / 100),
-          rep_len(6, p6*n_population / 100),
-          rep_len(7, p7*n_population / 100),
-          rep_len(8, p8*n_population / 100),
-          rep_len(9, p9*n_population / 100),
-          rep_len(10, p10*n_population / 100),
-          rep_len(11, p11*n_population)
-          )
-   
-   return(as.data.frame(vec))
+names(Pop_df) <- c("None", "Rare", "Small Pol.", "Strong Pol.")
+
+
+
+Pop_df_plot <- Pop_df %>% pivot_longer(everything(), values_to = "Rating", names_to = "Distr") %>% 
+   mutate(Distr = factor(Distr, levels = c("None", "Small Pol.","Rare", "Strong Pol.")))
+
+Pop_df_plot %>% ggplot(aes(Rating, fill = Distr))+
+   geom_bar(width= .75)+
+   facet_grid(rows = vars(Distr))+
+   scale_x_continuous(n.breaks = 11, expand = c(0,0))+
+   theme_minimal()+
+   theme(strip.text = element_blank(),
+         axis.text.y = element_blank(),
+         legend.position = "none",
+         plot.margin = margin(1, 2, 0, 0)
+         )+
+   geom_text(aes(x=6,y = 3500, label= Distr, color = Distr), size = 6.8)+
+   scale_fill_manual(values = colors)+
+   scale_color_manual(values = colors)+
+   ylab("Count")
+```
+  
+For this work, we will use the same sample sizes as the previous one, consisting of ``r nrow(sampled)`` different sample sizes:  
+```{r Show sample sequence}
+sample_sequence
+```
+  
+For each sample size, we replicate the random draw ``r replications_per_setting`` times. For each of the samples, the measures of bimodality coefficient (BC), polarization and group divergence are calculated. Similar to classification problems though, we will have to set thresholds for each measure, where values above a threshold indicate polarization, while those falling below indicate the absence of polarization. Luckily, the BC already has a set threshold of $0.\overline{5}$. 
+
+For the two other measures, I looked at the previous results, and the measurement of polarization has a low value for the rare distribution, even lower than the normal distribution (as it uses a weighted sum, thus small groups are discounted). Setting a low threshold so rare distributions are also classified as polarized will therefore also net us too many false negatives (e.g. saying normal distributions are polarized). I'll set the threshold arbitrarily at .5, and see how it goes...  
+
+## Results
+```{r Sampling}
+max_cols <- max(sampled)   
+
+# Register parallel backend with the desired number of cores
+num_cores <- detectCores()-1
+
+cl <- makeCluster(num_cores)
+registerDoParallel(cl)
+
+#rotate Pop_df, so our function works (each row needs to be a different distribution, instead of each col)
+rot_Pop_df <- as.data.frame(t(Pop_df))
+
+# Define function to process each combination of risk_distribution, samplesize and replications per setting
+sample_and_replicate_for_all_risks <- function(i) {
+  sampled_matrix_list <- list()
+  
+  for (j in 1:nrow(rot_Pop_df)) {
+    mat <- replicate(replications_per_setting,
+                     sample(1:n_population, size = sampled[i, 1], replace = TRUE)) #create matrix of our samples with replacing, times n - replications
+    
+    sampled_table <- df[j, mat] #using the matrix, collect the values from our risk distribution matrix (as a vector though...)
+    sampled_matrix <- as.data.frame(matrix(sampled_table,
+                                           nrow = replications_per_setting,
+                                           ncol = sampled[i, 1],
+                                           byrow = TRUE,
+                                           dimnames = NULL)) #create df out of these vectors instead of flat vectors
+    
+    
+    if (ncol(sampled_matrix) < max_cols) {
+      padding_matrix <- matrix(NA,
+                               nrow = nrow(sampled_matrix),
+                               ncol = max_cols - ncol(sampled_matrix))
+      sampled_matrix <- cbind(sampled_matrix, padding_matrix)
+    } #if matrix is not wide enough for our end result matrix, padd it with NA columns, so binding rows is doable (needs same amount of ncols)
+    
+    sampled_matrix <- cbind(matrix(sampled[i,1], nrow = replications_per_setting), 
+                            matrix(j, nrow = replications_per_setting),
+                            sampled_matrix) #bind columns with additional information such as sample size and which risk_distribution was sampled
+    
+    colnames(sampled_matrix) <- c("sample_size", "risk_distribution", paste0("rating_", 1:max_cols)) #rewrite colnames so it is identical to the bigh matrix
+    sampled_matrix_list[[j]] <- sampled_matrix #store in list
+  }
+  return(do.call(rbind, sampled_matrix_list)) #after all risk distributions are sampled from, bind them all and return the output
+  
 }
 
-dist1 <- create_discr_dist(50,0,0,
-                          0,0,0,
-                          0,0,0,0)
+# Perform parallel processing using foreach, iterating through the different samplesizes
+result <- foreach(i = 1:nrow(sampled), .combine = rbind) %dopar% {
+  sample_and_replicate_for_all_risks(i)
+}
 
-
-dist2 <- create_discr_dist(30,15,5,
-                          0,0,0,
-                          0,0,5,15)
-
-dist3 <- create_discr_dist(20,15,8,
-                          4,3,0,
-                          3,4,8,15)
-
+# Stop the parallel backend
+stopCluster(cl)
 ```
 
 
 
+## Discussion
+
+### Limitation
+as like in all classifications, no clear cut line between pol vs none, but gradual.
+
+in accordance to the previous one, setting the assumption that the rare polarization is, in fact, polarized, may not hold well in the study itself, as smaller outliers, misinterpretation or even a mouse slip may contribute to such a distribution, which we would then just assume is polarized.
+
+the treshhold were set somewhat arbitrary, and therefore, may not hold in the real deal, and cannot be generalized for further distributions, but only for the ones seen here. One might change the treshhold to find an optimized one where we would have the least false positives and false negatives, but this threshold will not generalize for other distributions. As such, I'll refrain from finding the optimum, as it would net us not any additional insight to our cause.
+
+only 3 measures of operatioalization was used, and thus, not every aspect of operationalization was covered.

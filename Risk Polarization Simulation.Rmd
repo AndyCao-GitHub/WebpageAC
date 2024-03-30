@@ -166,6 +166,8 @@ combined_distr <- as.data.frame(t(rbind(vec1,vec2)))
 
 df <- rbind(df, normal_distr, combined_distr)
 
+#saveRDS(df, "Population_distr.rds")
+
 #create the different functions so we can calculate the polarization measures, which is needed for the next step
 calculate_skewness <- function(column) {
    result <- describe(column, skew = TRUE)
@@ -267,7 +269,7 @@ cl <- makeCluster(num_cores)
 registerDoParallel(cl)
 
 # Define function to process each combination of risk_distribution, samplesize and replications per setting
-sample__and_replicate_for_all_risks <- function(i) {
+sample_and_replicate_for_all_risks <- function(i) {
   sampled_matrix_list <- list()
   
   for (j in 1:nrow(df)) {
@@ -302,7 +304,7 @@ sample__and_replicate_for_all_risks <- function(i) {
 
 # Perform parallel processing using foreach, iterating through the different samplesizes
 result <- foreach(i = 1:nrow(sampled), .combine = rbind) %dopar% {
-  sample__and_replicate_for_all_risks(i)
+  sample_and_replicate_for_all_risks(i)
 }
 
 # Stop the parallel backend
