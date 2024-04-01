@@ -31,7 +31,7 @@ n_scale_on_likert <- c(1:11)
 min_likert <- min(n_scale_on_likert)
 max_likert <- max(n_scale_on_likert)
 
-sample_sequence <- seq(10,200,by =10)
+sample_sequence <- c(seq(10,200,by =10))
 sampled <- data.frame(N_part = sample_sequence)
 
 replications_per_setting <- 200
@@ -53,7 +53,7 @@ knitr::opts_chunk$set(
    message = TRUE
    )
 ```
-# Power Analysis
+# How Many Ratings Are Needed?
 
 ## Introduction
 
@@ -65,13 +65,12 @@ As the unconventional approach did not work, we will revert back to the more "ol
 
 # Method
 
-The group has chosen to employ a 11-point likert scale instead of the previously used 101. Therefore, this work will also employ this scale.  
+## Population Distributions
+As we have no real consensus what polarization entails, getting a numerical quantifier for the effect size seems to be out of the question. 4 preset distributions were chosen again, each with differing grade of polarization, and will serve as proxies for our population distributions. While most of the previous distributions were used again (with the same color as last time) some adjustments were made. Notably, we've transitioned to a 11 -point likert scale, which our group has chosen to use for the upcoming study. Here are the distributions:  
 
-As we have no real consensus what polarization entails, getting a numerical quantifier for the effect size seems to be out of the question. 4 preset Distributions were chosen again, each with differing grade of polarization. For readers who feel familiar with the colors from my prior simulation, most of the distributions have adopted the same spirit from its predecessor, but some changes were made:  
-
-- [**None**]{style="color: `r colors[1]`;"} (a Normal Distribution, but this time with a shifted mean instead of the midpoint)  
+- [**None**]{style="color: `r colors[1]`;"} (a Normal Distribution, but this time with a shifted mean instead of the midpoint), representing a risk where a consensus is established.    
 - [**Small polarization**]{style="color: `r colors[2]`;"} (the skewed beta distribution from prior work was replaced with this one, representing a smaller polarization in the population)  
-- [**Rare**]{style="color: `r colors[3]`;"} (a majority rating on one extreme, while a minority group with base rate of ``r prop_minority *100`` on the other extreme)  
+- [**Rare**]{style="color: `r colors[3]`;"} (a majority rating on one extreme, while a minority group with base rate of ``r prop_minority *100``% on the other extreme)  
 - [**Strong polarization**]{style="color: `r colors[4]`;"} (still the symmetrical version, but this time in discrete shape)  
 
 It is important to note that while the normal and strong polarization distribution represent no and strong effects, the small and rare distributions should both illustrate small effects in the population, and putting one over the other really depends on how to interpret/ operationalize polarization itself (e.g. asymmetry, distance, agreement etc...).  
@@ -88,7 +87,7 @@ rare <- c(round(rnorm(n_population *(1- prop_minority), mean = 2,sd = 1.3)),
            round(rnorm(n_population *prop_minority, mean = 11,sd = .5)))
 rare <- pmin(pmax(rare, min_likert), max_likert)
 
-small_pol <- c(round(rnorm(n_population *.65, mean = 6,sd = .9)), 
+small_pol <- c(round(rnorm(n_population *.65, mean = 5,sd = .9)), 
            round(rnorm(n_population * .35, mean = 10,sd = .5)))
 small_pol <- pmin(pmax(small_pol, min_likert), max_likert)
 
@@ -121,14 +120,23 @@ Pop_df_plot %>% ggplot(aes(Rating, fill = Distr))+
    ylab("Count")
 ```
   
-For this work, we will use the same sample sizes as the previous one, consisting of ``r nrow(sampled)`` different sample sizes:  
+For this work, we will use different sample sizes consisting of ``r nrow(sampled)`` different sizes:  
 ```{r Show sample sequence}
 sample_sequence
 ```
   
+## Procedure
 For each sample size, we replicate the random draw ``r replications_per_setting`` times. For each of the samples, the measures of bimodality coefficient (BC), polarization and group divergence are calculated. Similar to classification problems though, we will have to set thresholds for each measure, where values above a threshold indicate polarization, while those falling below indicate the absence of polarization. Luckily, the BC already has a set threshold of $0.\overline{5}$. 
 
 For the two other measures, I looked at the previous results, and the measurement of polarization has a low value for the rare distribution, even lower than the normal distribution (as it uses a weighted sum, thus small groups are discounted). Setting a low threshold so rare distributions are also classified as polarized will therefore also net us too many false negatives (e.g. saying normal distributions are polarized). I'll set the group divergence threshold arbitrarily at ``r group_divergence_threshold`` and polarization threshold at ``r polarization_threshold`` and see how it goes...  
+
+Expectations are that with greater sample size, we would have a more accurate and reliable estimate of the population distribution.
+
+Our polarization measures functions as a sort of prediction models in classification problems. Good models with high accuracy can find polarization in case it is polarized (sensitivity), and differentiates distributions as not polarized in case it is not polarized (specificity). 
+If the measure differentiates the distribution with [**no polarization**]{style="color: `r colors[1]`;"} and [**high polarization**]{style="color: `r colors[4]`;"} clearly (e.g. difference of numerical values of said distributions are big), we would correctly categorize them as polarized or not more often according to the threshold. Using this analogy, setting the threshold may increase true positives in trade of with false positives and vice verca.
+
+If the measures of polarization in the population distributions were lower than our set thresholds, then said measure will never indicate polarization (except due to random noise).
+
 
 ```{r Sampling}
 max_cols <- max(sampled)   
@@ -226,7 +234,7 @@ calc_polarization <- function(vec){
 
 # this code is commented, as the computation takes too long, and I hate waiting while kniting. I have saved a sepparate rds file, which will be read in instead. Readers who want to uncomment section, select the lines to uncomment and press Ctrl + Shift + C (on Windows/Linux) or Cmd + Shift + C (on macOS)
 
-#apply the functions to our result matrix, therefore calculate for each drawn sample the polarization metrics
+# #apply the functions to our result matrix, therefore calculate for each drawn sample the polarization metrics
 # BC_result <- apply(result[,-c(1:2)], 1, calc_bimodality_coefficient)
 # sum(is.na(BC_result))
 # 
@@ -255,7 +263,7 @@ calc_polarization <- function(vec){
 #                                   result[,1:2]
 #                                   )
 # sum(is.na(combined_result_measures))
-#
+# 
 # saveRDS(combined_result_measures, "saved_RDS\\combined_result_measures_power_analysis.rds")
 
 combined_result_measures <- readRDS("saved_RDS\\combined_result_measures_power_analysis.rds")
@@ -296,8 +304,8 @@ combined_result_measures <- combined_result_measures %>%
    mutate(BC_Pol = if_else(BC_result >= BC_threshold, 1, 0),
           polarization_Pol = if_else(polarization_result >= polarization_threshold, 1, 0),
           group_divergence_Pol = if_else(group_divergence_result >= group_divergence_threshold, 1, 0),
-          transl_risk_distr = factor(risk_distribution, labels = c("None", "Rare", "Small Pol.", "Strong Pol.")),
-          transl_risk_distr = factor(transl_risk_distr, levels = c("None", "Small Pol.", "Rare", "Strong Pol.")))
+          transl_risk_distr = factor(risk_distribution, labels = c("None", "Small Pol.", "Rare", "Strong Pol.")))
+
 
 summarised_result_measures <- combined_result_measures %>% 
    pivot_longer(contains("_Pol"), names_to = "Measure", values_to = "is_polarized") %>% 
@@ -361,6 +369,7 @@ summarised_result_measures %>%
    annotate(geom = "text", x = 170, y = 92, label= "Power of .9", col = "blue")
 
 ```
+  
 ### Bimodality Coefficient Table
 ```{r Bimodality Table}
 summarised_result_measures %>% 
@@ -396,6 +405,7 @@ summarised_result_measures %>%
    annotate(geom = "text", x = 170, y = 92, label= "Power of .9", col = "blue")
 
 ```
+  
 ### Group Divergence Table
 ```{r Group Divergence Table}
 summarised_result_measures %>% 
@@ -433,7 +443,7 @@ summarised_result_measures %>%
    annotate(geom = "text", x = 170, y = 92, label= "Power of .9", col = "blue")
 
 ```
-
+  
 ### Polarization Table
 ```{r Polarization Table}
 summarised_result_measures %>% 
@@ -450,7 +460,13 @@ summarised_result_measures %>%
 
 # Discussion
 
-As expected, only the Bimodality Coefficient serves as a somewhat usable measure for the power analysis itself. 
+As expected using the measures of Group divergence and polarization were of no help. I would ascribe their failures on two things: the threshold were set arbitrarily (e.g. if the threshold were set in a better position, then we are more likely to find polarization, at the cost of finding false positives as well), or the measure itself have difficulties distinguishing polarization (or at least how I defined polarization). Take for example the [**rare**]{style="color: `r colors[3]`;"} distribution, which I defined as truly polarized, but the measure of polarization has a near identical value in comparison for the [**not polarized**]{style="color: `r colors[1]`;"} distribution. Likewise, the threshold for group divergence was too high, so it never categorized the [**small polarization**]{style="color: `r colors[2]`;"} distribution as polarized. In this case, we've restrained the effect size to be at least at ``r group_divergence_result``, 
+
+Though in defense for group divergence, the distribution with small polarization was still set 
+
+The BC 
+
+For those who are curious what would happen if we would change the thresholds, feel free to download the code and change the numbers yourself, I've put them in the first chunk so it is practical to do so.
 
 ## Limitations
 as like in all classifications, no clear cut line between pol vs none, but gradual.
@@ -459,9 +475,17 @@ in accordance to the previous one, setting the assumption that the rare polariza
 
 the treshhold were set somewhat arbitrary, and therefore, may not hold in the real deal, and cannot be generalized for further distributions, but only for the ones seen here. One might change the treshhold to find an optimized one where we would have the least false positives and false negatives, but this threshold will not generalize for other distributions. As such, I'll refrain from finding the optimum, as it would net us not any additional insight to our cause.
 
+likewise, one could set the thresholds for the BC even higher, thus restricting the amount of ambivalent distributions which were barely making the cutoff. This would lead to a greater sample size needed, but we would have a more reliable
+
 only 3 measures of operatioalization was used, and thus, not every aspect of operationalization was covered.
 
+samples were drawn at random. Our sampling procedure may not be as random as in this simulation. Caution is still adviced, or we risk in overestimating our power.
+
+again, take the reesults with a grain of salt again, maybe the "low polarization" is still a big effectsize. If that is the case, using such a small sample will only lead to a lack of power to find polarization.
+
 ## Conclusions
+
+
 
 # Credits
 
