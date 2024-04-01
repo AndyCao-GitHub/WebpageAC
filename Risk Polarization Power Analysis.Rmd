@@ -63,7 +63,7 @@ As the unconventional approach did not work, we will revert back to the more "ol
 
 
 
-## Method
+# Method
 
 The group has chosen to employ a 11-point likert scale instead of the previously used 101. Therefore, this work will also employ this scale.  
 
@@ -74,7 +74,7 @@ As we have no real consensus what polarization entails, getting a numerical quan
 - [**Rare**]{style="color: `r colors[3]`;"} (a majority rating on one extreme, while a minority group with base rate of ``r prop_minority *100`` on the other extreme)  
 - [**Strong polarization**]{style="color: `r colors[4]`;"} (still the symmetrical version, but this time in discrete shape)  
 
-It is important to note that while the normal and strong polarization distribution represent no and strong effects, the small and rare distributions should both illustrate small effects in the population, and putting one over the other really depends on how to interpret/ operationalize polarization itself (e.g. asymmetry, distance, or agreement).  
+It is important to note that while the normal and strong polarization distribution represent no and strong effects, the small and rare distributions should both illustrate small effects in the population, and putting one over the other really depends on how to interpret/ operationalize polarization itself (e.g. asymmetry, distance, agreement etc...).  
 
 ```{r Generation of Population Distribution}
 
@@ -265,7 +265,9 @@ vis_miss(combined_result_measures, sort_miss = F)
   
 After we've calculated the operationalisation measures for each of the ``r nrow(result)`` drawn samples, the measures were put into a data frame. As we can see, no missing values are here, indicating that each measure was calculated successfully.  
 
-## Results {.tabset .tabset-pills}
+# Results 
+
+## Overall {.tabset .tabset-pills}
 
 ### Polarization Values for the Population Distribution
 
@@ -301,16 +303,17 @@ summarised_result_measures <- combined_result_measures %>%
    pivot_longer(contains("_Pol"), names_to = "Measure", values_to = "is_polarized") %>% 
    mutate(Measure = str_remove(Measure, "_Pol")) %>%
    group_by(Measure,transl_risk_distr, sample_size) %>% 
-   summarise(`Prop_as_polarized_in_%` = sum(is_polarized)/replications_per_setting * 100)
+   summarise(`Prop_as_polarized_in_%` = sum(is_polarized)/replications_per_setting * 100)%>% 
+   ungroup() %>% 
+   mutate(Measure = case_when(Measure == "BC"~ "Bimodality Coefficient",
+                    Measure == "group_divergence" ~ "Group Divergence",
+                    Measure == "polarization" ~ "Polarization"))
 
 summarised_result_measures %>%
    pivot_wider(values_from = `Prop_as_polarized_in_%`,
                names_from = Measure) %>% 
    rename(`Polarization Grade` = transl_risk_distr, 
-          `Sample Size` = sample_size,
-          `Bimodality Coefficient` = BC,
-          `Group Divergence` = group_divergence,
-          Polarization = polarization) %>% 
+          `Sample Size` = sample_size) %>% 
    paged_table(options = list(rownames.print = F,
                               rows.print = length(sample_sequence),
                               cols.min.print = 5))
@@ -318,10 +321,7 @@ summarised_result_measures %>%
 ### Overall Plot
 ```{r Plot Results}
 
-summarised_result_measures %>% 
-   mutate(Measure = case_when(Measure == "BC"~ "Bimodal Coefficient",
-                    Measure == "group_divergence" ~ "Group Divergence",
-                    Measure == "polarization" ~ "Polarization")) %>% 
+summarised_result_measures %>%
    ggplot(aes(sample_size, `Prop_as_polarized_in_%`, col = transl_risk_distr, group = transl_risk_distr))+
    geom_line(linewidth = .9)+
    facet_grid(rows = vars(Measure))+
@@ -331,26 +331,128 @@ summarised_result_measures %>%
    theme(legend.title = element_blank(),
          strip.text = element_blank(),
          legend.position = "top")+
-   geom_text(aes(x= sample_sequence[length(sample_sequence)/2+ 3],y = 50, label= Measure), size = 7, inherit.aes = FALSE)
+   geom_text(aes(x= sample_sequence[length(sample_sequence)/2+ 3],y = 50, label= Measure), size = 7, inherit.aes = FALSE)+
+   ylab("Measure Indicated Polarization (in %)")+
+   xlab("Sample Size")
 
 
 ```
 
-## {- .tabset}
+## Bimodality Coefficient{.tabset .tabset-pills}
 
-```{r Individual Plots by Polarization Measure}
+### Plot
+```{r Individual Plots: Bimodality Coefficient}
 summarised_result_measures %>% 
-   filter(Measure == "BC")
-   
+   filter(Measure == "Bimodality Coefficient") %>% 
+   ggplot(aes(sample_size, `Prop_as_polarized_in_%`, col = transl_risk_distr, group = transl_risk_distr))+
+   geom_line(linewidth = 1.1) +
+   scale_x_continuous(breaks = sample_sequence)+
+   scale_y_continuous(breaks = seq(0,100, by = 10))+
+   scale_color_manual(values = colors)+
+   theme_minimal()+
+   theme(legend.title = element_blank(),
+         strip.text = element_blank(),
+         legend.position = "top")+
+   geom_text(aes(x= sample_sequence[length(sample_sequence)/2+ 3],y = 50, label= Measure), size = 7, inherit.aes = FALSE)+
+      geom_hline(yintercept = c(80,90) , col=c("black","blue"), linetype= "dashed", linewidth = .8)+
+   ylab("Measure Indicated Polarization (in %)")+
+   xlab("Sample Size")+
+   annotate(geom = "text", x = 170, y = 82, label= "Power of .8", col = "black")+
+   annotate(geom = "text", x = 170, y = 92, label= "Power of .9", col = "blue")
+
+```
+### Bimodality Coefficient Table
+```{r Bimodality Table}
+summarised_result_measures %>% 
+   filter(Measure == "Bimodality Coefficient")%>% 
+   rename(`Polarization Grade` = transl_risk_distr, 
+          `Sample Size` = sample_size,
+          `Indication towards Polarization (in %)` = `Prop_as_polarized_in_%`) %>% 
+   select(-Measure) %>% 
+   paged_table(options = list(rownames.print = F,
+                              rows.print = length(sample_sequence),
+                              cols.min.print = 5))
+```
+## Group Divergence{.tabset .tabset-pills}
+
+### Plot
+```{r Individual Plots: Group Divergence}
+summarised_result_measures %>% 
+   filter(Measure == "Group Divergence") %>% 
+   ggplot(aes(sample_size, `Prop_as_polarized_in_%`, col = transl_risk_distr, group = transl_risk_distr))+
+   geom_line(linewidth = 1.1) +
+   scale_x_continuous(breaks = sample_sequence)+
+   scale_y_continuous(breaks = seq(0,100, by = 10))+
+   scale_color_manual(values = colors)+
+   theme_minimal()+
+   theme(legend.title = element_blank(),
+         strip.text = element_blank(),
+         legend.position = "top")+
+   geom_text(aes(x= sample_sequence[length(sample_sequence)/2+ 3],y = 50, label= Measure), size = 7, inherit.aes = FALSE)+
+      geom_hline(yintercept = c(80,90) , col=c("black","blue"), linetype= "dashed", linewidth = .8)+
+   ylab("Measure Indicated Polarization (in %)")+
+   xlab("Sample Size")+
+   annotate(geom = "text", x = 170, y = 82, label= "Power of .8", col = "black")+
+   annotate(geom = "text", x = 170, y = 92, label= "Power of .9", col = "blue")
+
+```
+### Group Divergence Table
+```{r Group Divergence Table}
+summarised_result_measures %>% 
+   filter(Measure == "Group Divergence")%>% 
+   rename(`Polarization Grade` = transl_risk_distr, 
+          `Sample Size` = sample_size,
+          `Indication towards Polarization (in %)` = `Prop_as_polarized_in_%`) %>% 
+   select(-Measure) %>% 
+   paged_table(options = list(rownames.print = F,
+                              rows.print = length(sample_sequence),
+                              cols.min.print = 5))
+
+
+```
+## Polarization{.tabset .tabset-pills}
+
+### Plot
+```{r Individual Plots: Polarization}
+summarised_result_measures %>% 
+   filter(Measure == "Polarization") %>% 
+   ggplot(aes(sample_size, `Prop_as_polarized_in_%`, col = transl_risk_distr, group = transl_risk_distr))+
+   geom_line(linewidth = 1.1) +
+   scale_x_continuous(breaks = sample_sequence)+
+   scale_y_continuous(breaks = seq(0,100, by = 10))+
+   scale_color_manual(values = colors)+
+   theme_minimal()+
+   theme(legend.title = element_blank(),
+         strip.text = element_blank(),
+         legend.position = "top")+
+   geom_text(aes(x= sample_sequence[length(sample_sequence)/2+ 3],y = 50, label= Measure), size = 7, inherit.aes = FALSE)+
+      geom_hline(yintercept = c(80,90) , col=c("black","blue"), linetype= "dashed", linewidth = .8)+
+   ylab("Measure Indicated Polarization (in %)")+
+   xlab("Sample Size")+
+   annotate(geom = "text", x = 170, y = 82, label= "Power of .8", col = "black")+
+   annotate(geom = "text", x = 170, y = 92, label= "Power of .9", col = "blue")
 
 ```
 
+### Polarization Table
+```{r Polarization Table}
+summarised_result_measures %>% 
+   filter(Measure == "Polarization")%>% 
+   rename(`Polarization Grade` = transl_risk_distr, 
+          `Sample Size` = sample_size,
+          `Indication towards Polarization (in %)` = `Prop_as_polarized_in_%`) %>% 
+   select(-Measure) %>% 
+   paged_table(options = list(rownames.print = F,
+                              rows.print = length(sample_sequence),
+                              cols.min.print = 5))
+```
 
 
+# Discussion
 
-## Discussion
+As expected, only the Bimodality Coefficient serves as a somewhat usable measure for the power analysis itself. 
 
-### Limitations
+## Limitations
 as like in all classifications, no clear cut line between pol vs none, but gradual.
 
 in accordance to the previous one, setting the assumption that the rare polarization is, in fact, polarized, may not hold well in the study itself, as smaller outliers, misinterpretation or even a mouse slip may contribute to such a distribution, which we would then just assume is polarized.
@@ -359,13 +461,13 @@ the treshhold were set somewhat arbitrary, and therefore, may not hold in the re
 
 only 3 measures of operatioalization was used, and thus, not every aspect of operationalization was covered.
 
-### Conclusions
+## Conclusions
 
-## Credits
+# Credits
 
-### Acknowledgements
+## Acknowledgements
 
 
-### R Packages Used
+## R Packages Used
 
-### Use of AI
+## Use of AI

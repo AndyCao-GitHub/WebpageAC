@@ -13,6 +13,14 @@ navbar:
     - text: "About Me"
       href: AboutMe.html
    right:
+    # - text: "Silly Projects"
+    #   menu:
+    #      - text: "Analyzing Sentiment Trends Over Time in Select Narratives"
+    #        href: 404-Not-Found.html
+    #      - text: "PISA Scores Over Time"
+    #        href: 404-Not-Found.html
+    #      - text: "Student Study Performance"
+    #        href: 404-Not-Found.html
     - text: "Past Projects"
       menu:
          - text: "Risk Polarization Simulation"
