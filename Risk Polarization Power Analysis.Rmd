@@ -460,9 +460,11 @@ summarised_result_measures %>%
 
 # Discussion
 
-As expected using the measures of Group divergence and polarization were of no help. I would ascribe their failures on two things: the threshold were set arbitrarily (e.g. if the threshold were set in a better position, then we are more likely to find polarization, at the cost of finding false positives as well), or the measure itself have difficulties distinguishing polarization (or at least how I defined polarization). Take for example the [**rare**]{style="color: `r colors[3]`;"} distribution, which I defined as truly polarized, but the measure of polarization has a near identical value in comparison for the [**not polarized**]{style="color: `r colors[1]`;"} distribution. Likewise, the threshold for group divergence was too high, so it never categorized the [**small polarization**]{style="color: `r colors[2]`;"} distribution as polarized. In this case, we've restrained the effect size to be at least at ``r group_divergence_result``, 
+As expected using the measures of Group divergence and polarization were of no help. I would ascribe their failures on two things:  
 
-Though in defense for group divergence, the distribution with small polarization was still set 
+- The thresholds were not optimally set (e.g. if the threshold were set in a better position, then we are more likely to find polarization, at the cost of finding false positives as well). For example, the threshold for group divergence was too high, so it never categorized the [**small polarization**]{style="color: `r colors[2]`;"} distribution as polarized. In this case, we've restrained the effect size to be at least at ``r group_divergence_result``, which may be too restrictive for this measure.  
+
+- The measure itself have difficulties distinguishing polarization (or at least how I defined polarization). Take for example the [**rare**]{style="color: `r colors[3]`;"} distribution, which I defined as truly polarized, but the measure of polarization has a near identical value in comparison for the [**not polarized**]{style="color: `r colors[1]`;"} distribution. As a reminder, polarization uses weighted sums to calculate polarization. In consequence, it ignores the minority group and focuses on the bigger group on the left, which just happens to be a skewed normal distribution.
 
 The BC 
 
