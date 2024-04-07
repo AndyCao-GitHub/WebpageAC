@@ -1,0 +1,93 @@
+"0","library(tidyverse) #data wrangling and other tools for R"
+"2","Warnung: Paket ‘ggplot2’ wurde unter R Version 4.3.3 erstellt"
+"2","Warnung: Paket ‘tidyr’ wurde unter R Version 4.3.3 erstellt"
+"2","── [1mAttaching core tidyverse packages[22m ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── tidyverse 2.0.0 ──
+[32m✔[39m [34mdplyr    [39m 1.1.4     [32m✔[39m [34mreadr    [39m 2.1.4
+[32m✔[39m [34mforcats  [39m 1.0.0     [32m✔[39m [34mstringr  [39m 1.5.1
+[32m✔[39m [34mggplot2  [39m 3.5.0     [32m✔[39m [34mtibble   [39m 3.2.1
+[32m✔[39m [34mlubridate[39m 1.9.3     [32m✔[39m [34mtidyr    [39m 1.3.1
+[32m✔[39m [34mpurrr    [39m 1.0.2     "
+"2","── [1mConflicts[22m ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── tidyverse_conflicts() ──
+[31m✖[39m [34mdplyr[39m::[32mfilter()[39m masks [34mstats[39m::filter()
+[31m✖[39m [34mdplyr[39m::[32mlag()[39m    masks [34mstats[39m::lag()
+[36mℹ[39m Use the ]8;;http://conflicted.r-lib.org/conflicted package]8;; to force all conflicts to become errors"
+"0","library(knitr) # report generation in R"
+"0","library(psych) #calculate skew and kurtosis for BC"
+"2","
+Attache Paket: ‘psych’
+
+"
+"2","Die folgenden Objekte sind maskiert von ‘package:ggplot2’:
+
+    %+%, alpha
+
+"
+"0","library(agrmt) #for agreement and polarization calculation"
+"2","
+Attache Paket: ‘agrmt’
+
+"
+"2","Das folgende Objekt ist maskiert ‘package:dplyr’:
+
+    collapse
+
+"
+"2","Das folgende Objekt ist maskiert ‘package:tidyr’:
+
+    expand
+
+"
+"0","library(visdat) #visualize dataframes in plots"
+"0","library(RColorBrewer) #easy to use color palettes"
+"0","library(rmarkdown) #for the paged_table function"
+"2","Warnung: Paket ‘rmarkdown’ wurde unter R Version 4.3.3 erstellt"
+"0","library(doParallel) #parallel computation using multiple cores"
+"2","Warnung: Paket ‘doParallel’ wurde unter R Version 4.3.3 erstellt"
+"2","Lade nötiges Paket: foreach
+"
+"2","
+Attache Paket: ‘foreach’
+
+"
+"2","Die folgenden Objekte sind maskiert von ‘package:purrr’:
+
+    accumulate, when
+
+"
+"2","Lade nötiges Paket: iterators
+"
+"2","Lade nötiges Paket: parallel
+"
+"0","library(foreach) # for each function, so the simulation does not take ages"
+"0",""
+"0","#for those of you trying to change the thresholds, please do it here:"
+"0","BC_threshold <- 5/9"
+"0","polarization_threshold <- .5"
+"0","group_divergence_threshold <- .5"
+"0",""
+"0",""
+"0",""
+"0",""
+"0","colors <- brewer.pal(4, ""Dark2"")"
+"0",""
+"0","n_scale_on_likert <- c(1:11)"
+"0","min_likert <- min(n_scale_on_likert)"
+"0","max_likert <- max(n_scale_on_likert)"
+"0",""
+"0","sample_sequence <- c(seq(10,200,by =10))"
+"0","sampled <- data.frame(N_part = sample_sequence)"
+"0",""
+"0","replications_per_setting <- 200"
+"0",""
+"0","n_population <- 10^4"
+"0","prop_minority <- .05"
+"0",""
+"0","#set seed so every random thing here is reproducible"
+"0","set.seed(42)"
+"0",""
+"0","#set echo = FALSE (e.g. dont show code in output) for all chunks, except when explicitly telling otherwise"
+"0","knitr::opts_chunk$set("
+"0","   echo = FALSE,"
+"0","   warning = TRUE,"
+"0","   message = TRUE"
+"0","   )"
