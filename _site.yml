@@ -11,9 +11,9 @@ navbar:
     - text: "Home"
       href: index.html
     - text: "About Me"
-      href: AboutMe.html
+      #href: AboutMe.html
    right:
-    # - text: "Silly Projects"
+    - text: Silly Projects
     #   menu:
     #      - text: "Analyzing Sentiment Trends Over Time in Select Narratives"
     #        href: 404-Not-Found.html
@@ -31,8 +31,8 @@ navbar:
            href: 404-Not-Found.html
          - text: "Data Analytics"
            href: 404-Not-Found.html
-         - text: "Evolutionäre Persönlichkeitstheorie"
-           href: 404-Not-Found.html
+         #- text: "Evolutionäre Persönlichkeitstheorie"
+         #  href: 404-Not-Found.html
          - text: "Risk Polarization Power Analysis"
            href: Risk-Polarization-Power-Analysis.html
 output: distill::distill_article

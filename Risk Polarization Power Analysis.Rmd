@@ -61,15 +61,25 @@ knitr::opts_chunk$set(
 
 ## Introduction
 
-This work builds on my [first (and failed) attempt](Risk-Polarization-Simulation.html) to estimate how many ratings one needs to sample to have a reliable measure of a certain population. Therefore, readers are advised to catch up on my previous work to be up to speed on this smaller project.  
+This work builds on my [first (and failed) attempt](Risk-Polarization-Simulation.html) to estimate how many ratings one needs to sample for obtaining a dependable measure of a certain population. Therefore, readers are advised to catch up on my previous work to be up to speed on this smaller project.  
 
-As the unconventional approach did not work, we will revert back to the more "old school" methodologies of an a priori power analysis. That is, estimating the minimum sample size needed to uncover a set effect size (or bigger), given a significance level and type II (false negatives) error.  
+As the unconventional approach did not yield the desired results, we will revert back to the more "old school" methodologies of an a priori power analysis. That is, estimating the minimum sample size needed to uncover a set effect size (or larger), given a significance level and type II (false negatives) error.  
+
+Though in light of such an endeavor, we have two problems:  
+
+- Setting a (numerical) effect size depends on the polarization measure itself, and in how we define polarization in the first place.  
+- We do not have an actual significance test for polarization, hence we can not define when a distribution is polarized or not.  
+
+To solve these problems, the following proposals were taken for this work:  
+
+- 4 preset distributions were chosen, each with differing grade of polarization (and hence different effect size), and will serve as proxies for our assumed population distributions for 4 different risks.  
+- For the replacement of a polarization test, we calculate the measures of bimodality coefficient (BC), polarization and group divergence. These measures were chosen from the prior simulation work, as they seemed like good measures of polarization. We will then proceed in categorizing a distribution as "polarized" when values reach a preset threshold, and "not polarized" if the value falls below the threshold.  
 
 
 # Method
 
 ## Population Distributions
-As we have no real consensus what polarization entails, getting a numerical quantifier for the effect size seems to be out of the question. 4 preset distributions were chosen again, each with differing grade of polarization, and will serve as proxies for our assumed population distributions for 4 different risks. While most of the previous distributions were used again (with the same color as last time) some adjustments were made. Notably, we've transitioned to a 11 -point likert scale, which our group has chosen to use for the upcoming study. Here are the distributions with some comments:  
+While most of the previous distributions were used again (with the same color as last time) some adjustments were made. Notably, we've transitioned to a 11 -point likert scale, which our group has chosen to use for the upcoming study. Here are the distributions with some comments:  
 
 - [**None**]{style="color: `r colors[1]`;"} (a normal Distribution, but this time with a shifted mean instead of the midpoint), representing a risk where a consensus is established.    
 - [**Small polarization**]{style="color: `r colors[2]`;"} (the skewed beta distribution from prior work was replaced with this one, representing a smaller polarization in the population)  
@@ -115,26 +125,28 @@ Pop_df_plot %>% ggplot(aes(Rating, fill = Distr))+
    theme(strip.text = element_blank(),
          axis.text.y = element_blank(),
          legend.position = "none",
-         plot.margin = margin(1, 2, 0, 0)
-         )+
+         plot.margin = margin(1, 2, 0, 0),
+         axis.text.x = element_text(size = 12))+
    geom_text(aes(x=6,y = 3500, label= Distr, color = Distr), size = 6.8)+
    scale_fill_manual(values = colors)+
    scale_color_manual(values = colors)+
    ylab("Count")
 ```
   
+## Procedure
+
 For this work, we will use different sample sizes consisting of ``r nrow(sampled)`` different sizes:  
 ```{r Show sample sequence}
 sample_sequence
 ```
-  
-## Procedure
-For each sample size, we replicate the random draw ``r replications_per_setting`` times. For each of the samples, the measures of bimodality coefficient (BC), polarization and group divergence are calculated. These were chosen from the prior simulation work, which seemed like good proxy measures of polarization. For the power analysis though, we need thresholds for each of the measures, where values above a threshold indicate polarization, while those falling below indicate the absence of polarization. Luckily, the BC already has a set threshold of $0.\overline{5}$. 
 
-For the two other measures, previous results were consulted. After the realization that the measurement of polarization has a low value for the rare distribution (even lower than the normal distribution, as it uses a weighted sum, thus small groups are discounted). Setting a low threshold so rare distributions are also classified as polarized will therefore also net us too many false negatives (e.g. saying normal distributions are polarized). Hence the threshold for group divergence and polarization were (arbitrarily) set at ``r group_divergence_threshold`` and ``r polarization_threshold`` respectively...  
+For each sample size, we replicate the random draw ``r replications_per_setting`` times. 
 
-To sum up, the 4 different population distribution functions as our effect sizes, the thresholds functions as a proxy for when we actually reject or accept that the sampled distribution is polarized (similar to the alpha value and p-values), and thus we use different effect sizes to estimate the power.
+As mentioned in the introduction, we will use thresholds for each polarization measure to determine whether polarization is present or not. Luckily, the BC already has a set threshold of $0.\overline{5}$. 
 
+For the two other measures, previous results were consulted. Realization that the measurement of polarization has a low value for the rare distribution (even lower than the normal distribution, as it uses a weighted sum, thus small groups are discounted), leads to a crucial implication. Setting a low threshold for rare distributions in order to identify them as polarized will also net us too many false negatives (e.g. saying normal distributions are polarized). To note, group divergence values in the previous simulation ranged from .24 and .9, while the measure of polarization ranged from .1 to .8. Hence the threshold for group divergence and polarization were (arbitrarily) set at ``r group_divergence_threshold`` and ``r polarization_threshold`` respectively.    
+
+To summarize, 4 different population distribution were created and serve as our effect sizes, the thresholds functions as a proxy for when we actually reject or accept that the sampled distribution is polarized (similar to the alpha value and p-values), and thus we use different effect sizes to estimate the power.
 
 ```{r Sampling}
 max_cols <- max(sampled)   
@@ -269,7 +281,7 @@ combined_result_measures <- readRDS("saved_RDS\\combined_result_measures_power_a
 vis_miss(combined_result_measures, sort_miss = F)
 ```
   
-After we've calculated the operationalisation measures for each of the ``r nrow(result)`` drawn samples, the measures were put into a data frame. As we can see, no missing values are here, indicating that each measure was calculated successfully.  
+After we've calculated the polarization measures for each of the ``r nrow(result)`` drawn samples, the measures were put into a data frame. As we can see, no missing values are here, indicating that each measure was calculated successfully.  
 
 ## Expectations
 
@@ -279,9 +291,9 @@ It is expected that with greater sample size, we would have a more accurate and 
 
 - If the measure differentiates the distribution with [**no polarization**]{style="color: `r colors[1]`;"} and [**high polarization**]{style="color: `r colors[4]`;"} clearly (e.g. difference of numerical values of said distributions are big), we would correctly categorize them more often according to the threshold.  
 
-- Using the logic from the previous point, if the model itself is accurate, setting thresholds are not as important. For example, if the polarization measure gives two numerical outputs for two different distributions like .2 and .9, then setting the threshold at .5 or .6 would not matter for the categorization itself. In consequence, if the measure is pretty bad at distinguishing the distributions, like .5 and .6, then we have less wiggle room for error for the threshold, as the thresholds itself needs to be set in between those values to categorize them correctly.  
+- Using the logic from the previous point, if the model itself is accurate, setting the threshold is not as important. For example, if the polarization measure gives two numerical outputs for two different distributions like .2 and .9, then setting the threshold at .5 or .6 would not matter for the categorization itself. In consequence, if the measure is pretty bad at distinguishing the distributions, like .5 and .6, then we have less margin for error regarding the threshold selection, as the thresholds itself needs to be set in between those values to categorize them correctly.  
 
-- Setting the threshold may increase true positives in trade of with false positives and vice verca. One can always set the threshold at .1 or .9, thus having a low or high entry point where one would classify polarization (thus taking a liberal or conservative approach).  
+- Setting the threshold may increase true positives at the expense of false positives and vice verca. One can always set the threshold at .1 or .9, thus having a low or high entry point where one would classify polarization (thus taking a liberal or conservative approach).    
 
 Taking all of these points into account, the power analysis results mainly hinges on the polarization measurements itself and how fitting the threshold were set.  
 
@@ -472,25 +484,25 @@ summarised_result_measures %>%
 
 # Discussion
 
-As expected, using the measures of Group divergence and polarization were of no help. Two possible explanations (which is already discussed further above) come to mind:  
+Looking over the results, the measures of group divergence and polarization were of no help. Two possible explanations (which is already discussed further above) come to mind:  
 
 - The thresholds were not optimally set (e.g. if the threshold were set in a better position, then we are more likely to find polarization, at the cost of finding false positives as well). For example, the threshold for group divergence was too high, so it never categorized the [**small polarization**]{style="color: `r colors[2]`;"} distribution as polarized. In this case, we've restrained the effect size to be at least at ``r group_divergence_threshold``, which may be too restrictive for this measure.  
 
 - The measure itself have difficulties distinguishing polarization (or at least how I defined polarization). Take for example the [**rare**]{style="color: `r colors[3]`;"} distribution, which I defined as truly polarized, and compare it with the [**not polarized**]{style="color: `r colors[1]`;"} distribution. Their values are near identical. As a reminder, polarization uses weighted sums to calculate polarization. In consequence, it ignores the minority group in the rare distribution, and focuses on the bigger group on the left, which just happens to be a skewed normal distribution.  
 
-The BC on the other hand, at first glance, delivers a totally acceptable and logical output:  
+On the other hand, the BC delivers a totally acceptable and logical output:  
 
-- All polarized distributions are categorized as polarized, wheras the distribution [**without polarization**]{style="color: `r colors[1]`;"} is categorized as not polarized.  
+- All polarized distributions are categorized as polarized, whereas the distribution [**without polarization**]{style="color: `r colors[1]`;"} is categorized as not polarized.  
 
 - With increased sample size, we have more power.  
 
-- The [**strongly polarized distribution**]{style="color: `r colors[4]`;"} reaches a high power level the fastest, wheras [**small**]{style="color: `r colors[2]`;"} and [**rare**]{style="color: `r colors[3]`;"} polarization are slower due to their implied effect sizes. Bare in mind that rare distributions need bigger sample sizes, so that the probability of sampling from the minority group is sufficiently high.  
+- The [**strongly polarized distribution**]{style="color: `r colors[4]`;"} reaches a high power level the fastest, wheras [**small**]{style="color: `r colors[2]`;"} and [**rare**]{style="color: `r colors[3]`;"} polarizations are slower due to their implied effect sizes. Bare in mind that rare distributions need bigger sample sizes, so that the probability of sampling from the minority group is sufficiently high.  
 
-But on a more thorough investigation, we see that a sample size of 20 and 30 is enough to get a power of 80% for the [**small polarization distribution**]{style="color: `r colors[2]`;"} and [**rare distribution**]{style="color: `r colors[3]`;"} respectively.... Interpreting this result in a more favorable way, it seems like we've only found the bare minimum sample size needed (and even this interpretation is shaky, as the simulation uses random draws in perfect conditions, which does not translate well to our study). In a more realistic (and thus pessimistic way), the results seem to suggest that this approach (again) does not seem to give a satisfactory answer to our problem at hand. A sample size of 20 and 30 is very small and intuitively leads to unreliable outcomes. Using such a small sample size to infer how a population thinks/ feels about certain risks is out of the question.  
+But on a more thorough investigation, we see that the simulation for the BC indicates a **sample size of 20 and 30** is enough to get a power of 80% for the [**small polarization distribution**]{style="color: `r colors[2]`;"} and [**rare distribution**]{style="color: `r colors[3]`;"} respectively.... Interpreting this result in a more favorable way, it seems like we've only found the bare minimum sample size needed (and even this interpretation is shaky, as the simulation uses random draws in perfect conditions, which does not translate well to our study). In a more realistic (and thus pessimistic way), the results seem to suggest that this approach (again) does not seem to give a satisfactory answer to our problem at hand. A sample size of 20 and 30 is very small and intuitively leads to unreliable outcomes. Using such a small sample size to infer how a population thinks/ feels about certain risks is out of the question.  
 
 ## Limitations
 
-- Only 3 measures of operatioalization was used, and thus, not every aspect of polarization was covered.  
+- Only 3 measures of polarization was used, and thus, not every aspect of polarization was covered.  
 
 - Setting the assumption that the [**rare polarization**]{style="color: `r colors[3]`;"} is, in fact, polarized, may not hold well in the study itself, as outliers, misinterpretations or even a mouse slip may contribute to such a distribution, which we would then just assume is polarized.  
 
@@ -498,7 +510,7 @@ But on a more thorough investigation, we see that a sample size of 20 and 30 is 
 
 - Likewise, one could set the thresholds for the BC even higher, thus restricting the amount of ambivalent distributions which were barely making the cutoff. This would lead to a greater sample size needed, but we would have a more reliable and hopefully a more realistic approximation of how many sampled need to be drawn.  
 
-- As in all classification problems, polarization has no clear cut limit and should be understood as a gradient where some risks are more polarized than others.  
+- As in all classification problems, polarization has no clear cut limit and should be understood as a gradient where some risks are more polarized than others. The threshold implies that distributions just short of the threshold is significantly less polarized then those just above it, which can't be further from the truth.  
 
 - In this simulation, samples were drawn at random. Our sampling procedure may not be as random as in this simulation (maybe only those who answer our questionnaires are those on one pole, among other sampling difficulties).  
 
@@ -508,15 +520,41 @@ But on a more thorough investigation, we see that a sample size of 20 and 30 is 
 
 - This approach failed to deliver a clear cut answer in finding the needed sample size to find polarization in case there is one.  
 
-- Only the lower limit was found, but due to numerous reasons outlined in the limitations, it is adviced to increase the number up...  
+- Only the **lower limit** was found, but due to numerous reasons outlined in the limitations, it is adviced to increase the number...  
 
 - For those who are curious what would happen if we would change the thresholds, feel free to download the code and change the numbers yourself. I've put the variables in the first chunk so it is practical to do so.  
 
 # Credits
 
-## Acknowledgements
-
-
 ## R Packages Used
 
+- agrmt (Ruedin D (2023). _agrmt: Calculate Concentration and Dispersion in Ordered Rating Scales_. R package version 1.42.12,
+<https://CRAN.R-project.org/package=agrmt>.)  
+
+- doParallel (Corporation M, Weston S (2022). _doParallel: Foreach Parallel Adaptor for the 'parallel' Package_. R package version 1.0.17,
+<https://CRAN.R-project.org/package=doParallel>.)  
+
+- foreach (Microsoft, Weston S (2022). _foreach: Provides Foreach Looping Construct_. R package version 1.5.2, <https://CRAN.R-project.org/package=foreach>.)  
+
+- knitr (Xie Y (2023). _knitr: A General-Purpose Package for Dynamic Report Generation in R_. R package version 1.45, <https://yihui.org/knitr/>.)  
+
+- psych (William Revelle (2023). _psych: Procedures for Psychological, Psychometric, and Personality Research_. Northwestern University, Evanston, Illinois. R
+package version 2.3.9, <https://CRAN.R-project.org/package=psych>.)  
+
+- RColorBrewer (Neuwirth E (2022). _RColorBrewer: ColorBrewer Palettes_. R package version 1.1-3, <https://CRAN.R-project.org/package=RColorBrewer>.)  
+
+- rmarkdown (Allaire J, Xie Y, Dervieux C, McPherson J, Luraschi J, Ushey K, Atkins A, Wickham H, Cheng J, Chang W, Iannone R (2023). _rmarkdown: Dynamic
+Documents for R_. R package version 2.25, <https://github.com/rstudio/rmarkdown>.)  
+
+- tidyverse (Wickham H, Averick M, Bryan J, Chang W, McGowan LD, François R, Grolemund G, Hayes A, Henry L, Hester J, Kuhn M, Pedersen TL, Miller E, Bache SM,
+Müller K, Ooms J, Robinson D, Seidel DP, Spinu V, Takahashi K, Vaughan D, Wilke C, Woo K, Yutani H (2019). “Welcome to the tidyverse.” _Journal of
+Open Source Software_, *4*(43), 1686. doi:10.21105/joss.01686 <https://doi.org/10.21105/joss.01686>.)  
+
+- visdat (Tierney N (2017). “visdat: Visualising Whole Data Frames.” _JOSS_, *2*(16), 355. doi:10.21105/joss.00355 <https://doi.org/10.21105/joss.00355>,
+<http://dx.doi.org/10.21105/joss.00355>.)  
+
 ## Use of AI
+
+ChatGPT 3.5 (OpenAI. 2023, https://chat.openai.com/chat):  
+
+- Symbiotic writing of this whole document. The author wrote the first draft, and used the LLM for rephrasing work, which were mostly taken as inspiration. All sections were equally affected.
